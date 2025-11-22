@@ -1,13 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Iteration, Estimate } from '../types';
+import { Iteration, Estimate, Story } from '../types';
 
 interface AppState {
     iterations: Iteration[];
-    addIteration: (name: string) => void;
+    addIteration: (name: string, capacity?: number) => void;
     deleteIteration: (id: string) => void;
+    updateIteration: (id: string, updates: Partial<Iteration>) => void;
+    updateIterationCapacity: (id: string, capacity: number) => void;
     addStory: (iterationId: string, title: string, description?: string) => void;
+    updateStory: (iterationId: string, storyId: string, updates: Partial<Story>) => void;
     deleteStory: (iterationId: string, storyId: string) => void;
+    reorderStories: (iterationId: string, newStories: Story[]) => void;
     addEstimate: (iterationId: string, storyId: string, estimate: Omit<Estimate, 'id'>) => void;
     removeEstimate: (iterationId: string, storyId: string, estimateId: string) => void;
 }
@@ -19,21 +23,39 @@ export const useAppStore = create<AppState>()(
     persist(
         (set) => ({
             iterations: [],
-            addIteration: (name) =>
-                set((state) => ({
-                    iterations: [
-                        ...state.iterations,
-                        {
-                            id: generateId(),
-                            name,
-                            stories: [],
-                            createdAt: Date.now(),
-                        },
-                    ],
-                })),
+            addIteration: (name, capacity) =>
+                set((state) => {
+                    // Inherit capacity from the most recent iteration if not provided
+                    const defaultCapacity = capacity ?? (state.iterations.length > 0 ? state.iterations[0].capacity : 10);
+
+                    return {
+                        iterations: [
+                            {
+                                id: generateId(),
+                                name,
+                                stories: [],
+                                capacity: defaultCapacity,
+                                createdAt: Date.now(),
+                            },
+                            ...state.iterations,
+                        ],
+                    };
+                }),
             deleteIteration: (id) =>
                 set((state) => ({
                     iterations: state.iterations.filter((it) => it.id !== id),
+                })),
+            updateIteration: (id, updates) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === id ? { ...it, ...updates } : it
+                    ),
+                })),
+            updateIterationCapacity: (id, capacity) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === id ? { ...it, capacity } : it
+                    ),
                 })),
             addStory: (iterationId, title, description) =>
                 set((state) => ({
@@ -55,15 +77,31 @@ export const useAppStore = create<AppState>()(
                             : it
                     ),
                 })),
-            deleteStory: (iterationId, storyId) =>
+            updateStory: (iterationId, storyId, updates) =>
                 set((state) => ({
                     iterations: state.iterations.map((it) =>
                         it.id === iterationId
                             ? {
                                 ...it,
-                                stories: it.stories.filter((s) => s.id !== storyId),
+                                stories: it.stories.map((s) =>
+                                    s.id === storyId ? { ...s, ...updates } : s
+                                ),
                             }
                             : it
+                    ),
+                })),
+            deleteStory: (iterationId, storyId) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === iterationId
+                            ? { ...it, stories: it.stories.filter((s) => s.id !== storyId) }
+                            : it
+                    ),
+                })),
+            reorderStories: (iterationId, newStories) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === iterationId ? { ...it, stories: newStories } : it
                     ),
                 })),
             addEstimate: (iterationId, storyId, estimate) =>

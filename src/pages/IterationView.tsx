@@ -1,12 +1,118 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, BarChart } from 'lucide-react';
+import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, BarChart, GripVertical, Settings } from 'lucide-react';
 import { calculateStoryEstimate, calculateIterationStats } from '../utils/pert';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Story } from '../types';
+
+// Sortable Story Item Component
+const SortableStoryItem = ({
+    story,
+    iterationId,
+    deleteStory,
+    expectedValue,
+    isOverCapacity
+}: {
+    story: Story;
+    iterationId: string;
+    deleteStory: (itId: string, sId: string) => void;
+    expectedValue: number;
+    isOverCapacity: boolean;
+}) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+    } = useSortable({ id: story.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+    };
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            className={`group bg-white p-6 rounded-xl border shadow-sm hover:shadow-md transition-all flex items-center justify-between ${isOverCapacity ? 'border-red-200 bg-red-50/30' : 'border-slate-200'
+                }`}
+        >
+            <div className="flex items-center gap-3 flex-1">
+                <div {...attributes} {...listeners} className="cursor-grab text-slate-400 hover:text-slate-600">
+                    <GripVertical className="w-5 h-5" />
+                </div>
+                <Link to={`/iteration/${iterationId}/story/${story.id}`} className="flex-1">
+                    <div className="flex items-center justify-between mr-8">
+                        <div>
+                            <h3 className={`text-lg font-semibold transition-colors ${isOverCapacity ? 'text-red-900 group-hover:text-red-700' : 'text-slate-900 group-hover:text-indigo-600'
+                                }`}>
+                                {story.title}
+                            </h3>
+                            {story.description && (
+                                <p className="text-sm text-slate-500 mt-1 line-clamp-1">{story.description}</p>
+                            )}
+                            {isOverCapacity && (
+                                <div className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1">
+                                    Exceeds Capacity
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-6">
+                            <div className="text-right">
+                                <div className="text-sm text-slate-500">Estimates</div>
+                                <div className="font-medium text-slate-900">{story.estimates.length}</div>
+                            </div>
+                            <div className="text-right min-w-[80px]">
+                                <div className="text-sm text-slate-500">PERT Avg</div>
+                                <div className={`font-bold text-lg ${isOverCapacity ? 'text-red-600' : 'text-indigo-600'}`}>
+                                    {expectedValue > 0 ? expectedValue.toFixed(1) : '-'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Link>
+            </div>
+            <div className="flex items-center gap-4">
+                <Link
+                    to={`/iteration/${iterationId}/story/${story.id}`}
+                    className="text-slate-400 hover:text-indigo-600 transition-colors"
+                >
+                    <ChevronRight className="w-5 h-5" />
+                </Link>
+                <button
+                    onClick={() => deleteStory(iterationId, story.id)}
+                    className="text-slate-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
+                    title="Delete Story"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </button>
+            </div>
+        </div>
+    );
+};
 
 export const IterationView: React.FC = () => {
     const { iterationId } = useParams<{ iterationId: string }>();
-    const { iterations, addStory, deleteStory } = useAppStore();
+    const { iterations, addStory, deleteStory, reorderStories, updateIterationCapacity, updateIteration } = useAppStore();
 
     const iteration = iterations.find((it) => it.id === iterationId);
 
@@ -14,6 +120,17 @@ export const IterationView: React.FC = () => {
     const [newStoryTitle, setNewStoryTitle] = useState('');
     const [newStoryDesc, setNewStoryDesc] = useState('');
     const [confidenceLevel, setConfidenceLevel] = useState<50 | 80 | 95>(95);
+    const [isEditingCapacity, setIsEditingCapacity] = useState(false);
+    const [capacityInput, setCapacityInput] = useState('');
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [titleInput, setTitleInput] = useState('');
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     if (!iteration) {
         return (
@@ -36,17 +153,101 @@ export const IterationView: React.FC = () => {
         }
     };
 
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (over && active.id !== over.id) {
+            const oldIndex = iteration.stories.findIndex((s) => s.id === active.id);
+            const newIndex = iteration.stories.findIndex((s) => s.id === over.id);
+
+            const newStories = arrayMove(iteration.stories, oldIndex, newIndex);
+            reorderStories(iteration.id, newStories);
+        }
+    };
+
+    const handleCapacityUpdate = (e: React.FormEvent) => {
+        e.preventDefault();
+        const cap = parseInt(capacityInput);
+        if (!isNaN(cap) && cap >= 1) {
+            updateIterationCapacity(iteration.id, cap);
+            setIsEditingCapacity(false);
+        }
+    };
+
+    const handleTitleUpdate = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (titleInput.trim()) {
+            updateIteration(iteration.id, { name: titleInput.trim() });
+            setIsEditingTitle(false);
+        }
+    };
+
+    let cumulativeExpectedValue = 0;
+    const capacity = iteration.capacity || 10; // Default capacity if undefined
+
     return (
         <div className="space-y-8">
-            <div className="flex items-center gap-4">
-                <Link to="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
-                    <ArrowLeft className="w-6 h-6" />
-                </Link>
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900">{iteration.name}</h1>
-                    <p className="text-slate-500 mt-1">
-                        {iteration.stories.length} stories • Created {new Date(iteration.createdAt).toLocaleDateString()}
-                    </p>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <Link to="/" className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
+                        <ArrowLeft className="w-6 h-6" />
+                    </Link>
+                    <div>
+                        {isEditingTitle ? (
+                            <form onSubmit={handleTitleUpdate} className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    className="text-3xl font-bold text-slate-900 border-b-2 border-indigo-500 outline-none bg-transparent"
+                                    value={titleInput}
+                                    onChange={(e) => setTitleInput(e.target.value)}
+                                    autoFocus
+                                    onBlur={() => setIsEditingTitle(false)}
+                                />
+                            </form>
+                        ) : (
+                            <h1
+                                className="text-3xl font-bold text-slate-900 hover:text-indigo-600 cursor-pointer flex items-center gap-2 group"
+                                onClick={() => {
+                                    setTitleInput(iteration.name);
+                                    setIsEditingTitle(true);
+                                }}
+                            >
+                                {iteration.name}
+                                <Settings className="w-5 h-5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </h1>
+                        )}
+                        <p className="text-slate-500 mt-1">
+                            {iteration.stories.length} stories • Created {new Date(iteration.createdAt).toLocaleDateString()}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
+                    <div className="text-sm font-medium text-slate-500 uppercase">Capacity:</div>
+                    {isEditingCapacity ? (
+                        <form onSubmit={handleCapacityUpdate} className="flex items-center gap-2">
+                            <input
+                                type="number"
+                                min="1"
+                                className="w-16 px-2 py-1 border border-slate-300 rounded text-sm"
+                                value={capacityInput}
+                                onChange={(e) => setCapacityInput(e.target.value)}
+                                autoFocus
+                                onBlur={() => setIsEditingCapacity(false)}
+                            />
+                        </form>
+                    ) : (
+                        <button
+                            onClick={() => {
+                                setCapacityInput(capacity.toString());
+                                setIsEditingCapacity(true);
+                            }}
+                            className="font-bold text-slate-900 hover:text-indigo-600 flex items-center gap-1"
+                        >
+                            {capacity}
+                            <Settings className="w-3 h-3 text-slate-400" />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -78,8 +279,8 @@ export const IterationView: React.FC = () => {
                                             key={level}
                                             onClick={() => setConfidenceLevel(level as 50 | 80 | 95)}
                                             className={`px-2 py-0.5 text-xs font-medium rounded-md transition-colors ${confidenceLevel === level
-                                                    ? 'bg-indigo-600 text-white shadow-sm'
-                                                    : 'text-indigo-300 hover:text-white hover:bg-indigo-800'
+                                                ? 'bg-indigo-600 text-white shadow-sm'
+                                                : 'text-indigo-300 hover:text-white hover:bg-indigo-800'
                                                 }`}
                                         >
                                             {level}%
@@ -165,55 +366,43 @@ export const IterationView: React.FC = () => {
                         <p className="text-slate-500">Add a story to start estimating.</p>
                     </div>
                 ) : (
-                    iteration.stories.map((story) => {
-                        const { expectedValue } = calculateStoryEstimate(story.estimates);
-                        return (
-                            <div
-                                key={story.id}
-                                className="group bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex items-center justify-between"
-                            >
-                                <Link to={`/iteration/${iteration.id}/story/${story.id}`} className="flex-1">
-                                    <div className="flex items-center justify-between mr-8">
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                                                {story.title}
-                                            </h3>
-                                            {story.description && (
-                                                <p className="text-sm text-slate-500 mt-1 line-clamp-1">{story.description}</p>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-6">
-                                            <div className="text-right">
-                                                <div className="text-sm text-slate-500">Estimates</div>
-                                                <div className="font-medium text-slate-900">{story.estimates.length}</div>
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <SortableContext
+                            items={iteration.stories.map(s => s.id)}
+                            strategy={verticalListSortingStrategy}
+                        >
+                            {iteration.stories.map((story, index) => {
+                                const { expectedValue } = calculateStoryEstimate(story.estimates);
+                                cumulativeExpectedValue += expectedValue;
+                                const isOverCapacity = cumulativeExpectedValue > capacity;
+                                const showCutoff = !isOverCapacity && (cumulativeExpectedValue + (iteration.stories[index + 1] ? calculateStoryEstimate(iteration.stories[index + 1].estimates).expectedValue : 0)) > capacity;
+
+                                return (
+                                    <React.Fragment key={story.id}>
+                                        <SortableStoryItem
+                                            story={story}
+                                            iterationId={iteration.id}
+                                            deleteStory={deleteStory}
+                                            expectedValue={expectedValue}
+                                            isOverCapacity={isOverCapacity}
+                                        />
+                                        {showCutoff && (
+                                            <div className="relative py-2 flex items-center justify-center">
+                                                <div className="absolute inset-x-0 top-1/2 border-t-2 border-dashed border-red-300"></div>
+                                                <span className="relative bg-slate-50 px-2 text-xs font-bold text-red-500 uppercase tracking-wider">
+                                                    Capacity Cut-off ({capacity})
+                                                </span>
                                             </div>
-                                            <div className="text-right min-w-[80px]">
-                                                <div className="text-sm text-slate-500">PERT Avg</div>
-                                                <div className="font-bold text-indigo-600 text-lg">
-                                                    {expectedValue > 0 ? expectedValue.toFixed(1) : '-'}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </Link>
-                                <div className="flex items-center gap-4">
-                                    <Link
-                                        to={`/iteration/${iteration.id}/story/${story.id}`}
-                                        className="text-slate-400 hover:text-indigo-600 transition-colors"
-                                    >
-                                        <ChevronRight className="w-5 h-5" />
-                                    </Link>
-                                    <button
-                                        onClick={() => deleteStory(iteration.id, story.id)}
-                                        className="text-slate-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
-                                        title="Delete Story"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+                        </SortableContext>
+                    </DndContext>
                 )}
             </div>
         </div>

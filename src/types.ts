@@ -18,5 +18,6 @@ export interface Iteration {
     id: string;
     name: string;
     stories: Story[];
+    capacity?: number;
     createdAt: number;
 }
