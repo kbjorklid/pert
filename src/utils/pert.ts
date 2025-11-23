@@ -171,8 +171,21 @@ function sampleBeta(alpha: number, beta: number): number {
     return x / (x + y);
 }
 
-export const generateMonteCarloData = (storiesEstimates: Estimate[][], iterations: number = 100000) => {
-    if (storiesEstimates.length === 0) return [];
+// Calculate percentile from sorted array using linear interpolation
+function calculatePercentile(sortedData: Float64Array, percentile: number): number {
+    if (sortedData.length === 0) return 0;
+    if (sortedData.length === 1) return sortedData[0];
+
+    const index = (percentile / 100) * (sortedData.length - 1);
+    const lower = Math.floor(index);
+    const upper = Math.ceil(index);
+    const weight = index - lower;
+
+    return sortedData[lower] * (1 - weight) + sortedData[upper] * weight;
+}
+
+export const generateMonteCarloData = (storiesEstimates: Estimate[][], iterations: number = 200000) => {
+    if (storiesEstimates.length === 0) return { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
 
     const samples = new Float64Array(iterations).fill(0);
     let minTotal = 0;
@@ -205,7 +218,7 @@ export const generateMonteCarloData = (storiesEstimates: Estimate[][], iteration
         return { o, p, range, alpha, betaVal };
     }).filter(p => p !== null) as ({ o: number, p: number, range: number, alpha: number, betaVal: number } | { fixed: number })[];
 
-    if (storyParams.length === 0) return [];
+    if (storyParams.length === 0) return { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
 
     // Run simulation
     for (let i = 0; i < iterations; i++) {
@@ -219,10 +232,21 @@ export const generateMonteCarloData = (storiesEstimates: Estimate[][], iteration
         }
     }
 
+    // Sort samples for percentile calculation
+    const sortedSamples = samples.slice().sort((a, b) => a - b);
+
+    // Calculate percentiles from actual sample data
+    const percentiles = {
+        p50: calculatePercentile(sortedSamples, 50),
+        p70: calculatePercentile(sortedSamples, 70),
+        p80: calculatePercentile(sortedSamples, 80),
+        p95: calculatePercentile(sortedSamples, 95)
+    };
+
     // Create Histogram
     const bucketCount = 25; // Number of points in graph
     const range = maxTotal - minTotal;
-    if (range <= 0) return [{ value: minTotal, probability: 1 }];
+    if (range <= 0) return { data: [{ value: minTotal, probability: 1 }], percentiles };
 
     const buckets = new Array(bucketCount).fill(0);
     const stepSize = range / bucketCount;
@@ -246,5 +270,5 @@ export const generateMonteCarloData = (storiesEstimates: Estimate[][], iteration
     if (data[0].probability > 0) data.unshift({ value: minTotal, probability: 0 });
     if (data[data.length - 1].probability > 0) data.push({ value: maxTotal, probability: 0 });
 
-    return data;
+    return { data, percentiles };
 };

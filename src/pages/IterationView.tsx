@@ -254,12 +254,20 @@ export const IterationView: React.FC = () => {
             }
         });
 
-        const chartData = hasEstimates ? generateMonteCarloData(storiesEstimates) : [];
+        const result = hasEstimates ? generateMonteCarloData(storiesEstimates) : { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
+        const chartData = result.data;
+        const percentiles = result.percentiles;
 
-        // Calculate required capacity for the current confidence level
-        const totalEV = totalStats[cat.id].ev;
-        const totalStdDev = Math.sqrt(totalStats[cat.id].var);
-        const requiredCapacity = totalEV + (z * totalStdDev);
+        // Map confidence level to percentile
+        const percentileMap: Record<ConfidenceLevel, number> = {
+            'Avg': percentiles.p50,
+            '70%': percentiles.p70,
+            '80%': percentiles.p80,
+            '95%': percentiles.p95
+        };
+
+        // Use Monte Carlo percentile for required capacity instead of z-score
+        const requiredCapacity = hasEstimates ? percentileMap[confidenceLevel] : 0;
         const availableCapacity = iteration.capacities[cat.id] || 0;
 
         // Calculate min/max for X-axis domain from chart data
@@ -273,7 +281,7 @@ export const IterationView: React.FC = () => {
             maxVal,
             requiredCapacity,
             availableCapacity,
-            expectedValue: totalEV,
+            expectedValue: totalStats[cat.id].ev,
             hasEstimates
         };
     });

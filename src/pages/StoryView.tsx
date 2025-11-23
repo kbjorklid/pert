@@ -66,9 +66,10 @@ export const StoryView: React.FC = () => {
         };
     }, [story, selectedCategoryId]);
 
-    const chartData = useMemo(() => {
-        if (estimatesForCategory.length === 0) return [];
-        return generateMonteCarloData([estimatesForCategory]);
+    const { chartData, percentiles } = useMemo(() => {
+        if (estimatesForCategory.length === 0) return { chartData: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
+        const result = generateMonteCarloData([estimatesForCategory]);
+        return { chartData: result.data, percentiles: result.percentiles };
     }, [estimatesForCategory]);
 
     if (!iteration || !story) {
@@ -379,27 +380,27 @@ export const StoryView: React.FC = () => {
                                             fillOpacity={1}
                                             fill="url(#colorProb)"
                                         />
-                                        {/* Confidence Interval Lines */}
+                                        {/* Percentile Lines from Monte Carlo Simulation */}
                                         <ReferenceLine
-                                            x={expectedValue}
+                                            x={percentiles.p50}
                                             stroke="#4f46e5"
                                             strokeDasharray="3 3"
                                             label={{ value: 'Avg', position: 'top', fill: '#4f46e5', fontSize: 11 }}
                                         />
                                         <ReferenceLine
-                                            x={expectedValue + 1.036 * standardDeviation}
+                                            x={percentiles.p70}
                                             stroke="#f59e0b"
                                             strokeDasharray="3 3"
                                             label={{ value: '70%', position: 'top', fill: '#f59e0b', fontSize: 11 }}
                                         />
                                         <ReferenceLine
-                                            x={expectedValue + 1.282 * standardDeviation}
+                                            x={percentiles.p80}
                                             stroke="#f97316"
                                             strokeDasharray="3 3"
                                             label={{ value: '80%', position: 'top', fill: '#f97316', fontSize: 11 }}
                                         />
                                         <ReferenceLine
-                                            x={expectedValue + 1.960 * standardDeviation}
+                                            x={percentiles.p95}
                                             stroke="#ef4444"
                                             strokeDasharray="3 3"
                                             label={{ value: '95%', position: 'top', fill: '#ef4444', fontSize: 11 }}
