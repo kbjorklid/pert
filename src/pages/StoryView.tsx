@@ -16,20 +16,35 @@ export const StoryView: React.FC = () => {
     const [optimistic, setOptimistic] = useState('');
     const [mostLikely, setMostLikely] = useState('');
     const [pessimistic, setPessimistic] = useState('');
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
 
     const [isEditing, setIsEditing] = useState(false);
     const [editTitle, setEditTitle] = useState('');
     const [editDesc, setEditDesc] = useState('');
 
-    const { expectedValue, standardDeviation, avgOptimistic, avgMostLikely, avgPessimistic } = useMemo(() => {
-        if (!story || story.estimates.length === 0) {
-            return { expectedValue: 0, standardDeviation: 0, avgOptimistic: 0, avgMostLikely: 0, avgPessimistic: 0 };
+    // Set default category when iteration loads
+    React.useEffect(() => {
+        if (iteration && iteration.categories.length > 0 && !selectedCategoryId) {
+            setSelectedCategoryId(iteration.categories[0].id);
+        }
+    }, [iteration, selectedCategoryId]);
+
+    const activeCategory = iteration?.categories.find(c => c.id === selectedCategoryId);
+
+    const { expectedValue, standardDeviation, avgOptimistic, avgMostLikely, avgPessimistic, estimatesForCategory } = useMemo(() => {
+        if (!story || !selectedCategoryId) {
+            return { expectedValue: 0, standardDeviation: 0, avgOptimistic: 0, avgMostLikely: 0, avgPessimistic: 0, estimatesForCategory: [] };
         }
 
-        const stats = calculateStoryEstimate(story.estimates);
+        const filteredEstimates = story.estimates.filter(e => e.categoryId === selectedCategoryId);
 
-        // Calculate average O, M, P for visualization
-        const total = story.estimates.reduce((acc, est) => ({
+        if (filteredEstimates.length === 0) {
+            return { expectedValue: 0, standardDeviation: 0, avgOptimistic: 0, avgMostLikely: 0, avgPessimistic: 0, estimatesForCategory: [] };
+        }
+
+        const stats = calculateStoryEstimate(filteredEstimates);
+
+        const total = filteredEstimates.reduce((acc, est) => ({
             o: acc.o + est.optimistic,
             m: acc.m + est.mostLikely,
             p: acc.p + est.pessimistic
@@ -37,11 +52,12 @@ export const StoryView: React.FC = () => {
 
         return {
             ...stats,
-            avgOptimistic: total.o / story.estimates.length,
-            avgMostLikely: total.m / story.estimates.length,
-            avgPessimistic: total.p / story.estimates.length
+            avgOptimistic: total.o / filteredEstimates.length,
+            avgMostLikely: total.m / filteredEstimates.length,
+            avgPessimistic: total.p / filteredEstimates.length,
+            estimatesForCategory: filteredEstimates
         };
-    }, [story]);
+    }, [story, selectedCategoryId]);
 
     const chartData = useMemo(() =>
         generateProbabilityData(avgOptimistic, avgMostLikely, avgPessimistic),
@@ -61,14 +77,15 @@ export const StoryView: React.FC = () => {
 
     const handleAddEstimate = (e: React.FormEvent) => {
         e.preventDefault();
-        if (userName && optimistic && mostLikely && pessimistic) {
+        if (userName && optimistic && mostLikely && pessimistic && selectedCategoryId) {
             addEstimate(iteration.id, story.id, {
+                categoryId: selectedCategoryId,
                 userName,
                 optimistic: Number(optimistic),
                 mostLikely: Number(mostLikely),
                 pessimistic: Number(pessimistic),
             });
-            setUserName('');
+            // Don't clear user name, usually same person adds multiple
             setOptimistic('');
             setMostLikely('');
             setPessimistic('');
@@ -152,13 +169,30 @@ export const StoryView: React.FC = () => {
                 </div>
             </div>
 
+            {/* Category Selector Tabs */}
+            <div className="flex gap-2 border-b border-slate-200 pb-1 overflow-x-auto">
+                {iteration.categories.map(cat => (
+                    <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategoryId(cat.id)}
+                        className={`px-4 py-2 rounded-t-lg font-medium text-sm transition-colors whitespace-nowrap border-b-2 ${selectedCategoryId === cat.id
+                                ? 'border-indigo-600 text-indigo-600 bg-indigo-50'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                            }`}
+                    >
+                        <span className="w-2 h-2 rounded-full inline-block mr-2" style={{ backgroundColor: cat.color }}></span>
+                        {cat.name}
+                    </button>
+                ))}
+            </div>
+
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Left Column: Estimates List & Form */}
                 <div className="lg:col-span-1 space-y-8">
                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                             <Plus className="w-5 h-5 text-indigo-600" />
-                            Add Estimate
+                            Add Estimate ({activeCategory?.name})
                         </h3>
                         <form onSubmit={handleAddEstimate} className="space-y-4">
                             <div>
@@ -219,13 +253,13 @@ export const StoryView: React.FC = () => {
                     <div className="space-y-4">
                         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                             <Users className="w-5 h-5 text-slate-500" />
-                            Estimates ({story.estimates.length})
+                            {activeCategory?.name} Estimates ({estimatesForCategory.length})
                         </h3>
-                        {story.estimates.length === 0 ? (
-                            <p className="text-slate-500 text-sm italic">No estimates yet.</p>
+                        {estimatesForCategory.length === 0 ? (
+                            <p className="text-slate-500 text-sm italic">No estimates for this category yet.</p>
                         ) : (
                             <div className="space-y-3">
-                                {story.estimates.map((est) => {
+                                {estimatesForCategory.map((est) => {
                                     const pert = calculatePERT(est.optimistic, est.mostLikely, est.pessimistic);
                                     return (
                                         <div key={est.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group">
@@ -260,17 +294,17 @@ export const StoryView: React.FC = () => {
                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="text-lg font-semibold text-slate-900 mb-6 flex items-center gap-2">
                             <Calculator className="w-5 h-5 text-indigo-600" />
-                            Probability Distribution (Beta)
+                            Probability Distribution ({activeCategory?.name})
                         </h3>
 
-                        {story.estimates.length > 0 ? (
+                        {estimatesForCategory.length > 0 ? (
                             <div className="h-[400px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={chartData} margin={{ top: 30, right: 30, left: 0, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="colorProb" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
+                                                <stop offset="5%" stopColor={activeCategory?.color || '#4f46e5'} stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor={activeCategory?.color || '#4f46e5'} stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -291,12 +325,12 @@ export const StoryView: React.FC = () => {
                                         <Area
                                             type="monotone"
                                             dataKey="probability"
-                                            stroke="#4f46e5"
+                                            stroke={activeCategory?.color || '#4f46e5'}
                                             strokeWidth={2}
                                             fillOpacity={1}
                                             fill="url(#colorProb)"
                                         />
-                                        <ReferenceLine x={expectedValue} stroke="#4f46e5" strokeDasharray="3 3" label={{ value: 'Expected', position: 'top', fill: '#4f46e5', fontSize: 12 }} />
+                                        <ReferenceLine x={expectedValue} stroke={activeCategory?.color || '#4f46e5'} strokeDasharray="3 3" label={{ value: 'Expected', position: 'top', fill: activeCategory?.color || '#4f46e5', fontSize: 12 }} />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
@@ -307,22 +341,19 @@ export const StoryView: React.FC = () => {
                         )}
                     </div>
 
-                    {story.estimates.length > 0 && (
+                    {estimatesForCategory.length > 0 && (
                         <div className="space-y-6">
                             <div className="grid sm:grid-cols-2 gap-4">
                                 <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
                                     <div className="text-sm text-indigo-600 font-medium uppercase mb-1">Final PERT Estimate</div>
                                     <div className="text-4xl font-bold text-indigo-900">{expectedValue.toFixed(2)}</div>
                                     <p className="text-sm text-indigo-700 mt-2">
-                                        Based on {story.estimates.length} estimates. This is the weighted average of all inputs.
+                                        Based on {estimatesForCategory.length} estimates.
                                     </p>
                                 </div>
                                 <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                                     <div className="text-sm text-slate-500 font-medium uppercase mb-1">Uncertainty (Std Dev)</div>
                                     <div className="text-4xl font-bold text-slate-700">{standardDeviation.toFixed(2)}</div>
-                                    <p className="text-sm text-slate-500 mt-2">
-                                        A higher value indicates more disagreement or uncertainty among estimators.
-                                    </p>
                                 </div>
                             </div>
 
@@ -348,9 +379,6 @@ export const StoryView: React.FC = () => {
                                         </div>
                                     </div>
                                 </div>
-                                <p className="text-xs text-slate-400 mt-3 text-center">
-                                    Ranges based on Normal Approximation ($E \pm Z\sigma$)
-                                </p>
                             </div>
                         </div>
                     )}

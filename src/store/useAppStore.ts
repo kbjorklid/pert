@@ -1,32 +1,53 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Iteration, Estimate, Story } from '../types';
+import { Iteration, Estimate, Story, EstimateCategory } from '../types';
 
 interface AppState {
     iterations: Iteration[];
-    addIteration: (name: string, capacity?: number) => void;
+    addIteration: (name: string) => void;
     deleteIteration: (id: string) => void;
     updateIteration: (id: string, updates: Partial<Iteration>) => void;
-    updateIterationCapacity: (id: string, capacity: number) => void;
+
+    // Category Management
+    addCategory: (iterationId: string, name: string, color: string) => void;
+    removeCategory: (iterationId: string, categoryId: string) => void;
+    updateCategoryCapacity: (iterationId: string, categoryId: string, capacity: number) => void;
+
     addStory: (iterationId: string, title: string, description?: string) => void;
     updateStory: (iterationId: string, storyId: string, updates: Partial<Story>) => void;
     deleteStory: (iterationId: string, storyId: string) => void;
     reorderStories: (iterationId: string, newStories: Story[]) => void;
+
     addEstimate: (iterationId: string, storyId: string, estimate: Omit<Estimate, 'id'>) => void;
     removeEstimate: (iterationId: string, storyId: string, estimateId: string) => void;
 }
 
-// Simple UUID generator if uuid package is not available or we want to keep it light
+// Simple UUID generator
 const generateId = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+const DEFAULT_CATEGORY: EstimateCategory = { id: 'default', name: 'Default', color: 'bg-indigo-500' };
 
 export const useAppStore = create<AppState>()(
     persist(
         (set) => ({
             iterations: [],
-            addIteration: (name, capacity) =>
+            addIteration: (name) =>
                 set((state) => {
-                    // Inherit capacity from the most recent iteration if not provided
-                    const defaultCapacity = capacity ?? (state.iterations.length > 0 ? state.iterations[0].capacity : 10);
+                    // Inherit categories from the most recent iteration, or use default
+                    let categories: EstimateCategory[] = [DEFAULT_CATEGORY];
+                    let capacities: Record<string, number> = { [DEFAULT_CATEGORY.id]: 10 };
+
+                    if (state.iterations.length > 0) {
+                        const prev = state.iterations[0];
+                        // If previous iteration has categories, copy them
+                        if (prev.categories && prev.categories.length > 0) {
+                            categories = [...prev.categories];
+                            capacities = { ...prev.capacities };
+                        } else if (prev.capacity) {
+                            // Legacy migration for inheritance
+                            capacities = { [DEFAULT_CATEGORY.id]: prev.capacity };
+                        }
+                    }
 
                     return {
                         iterations: [
@@ -34,7 +55,8 @@ export const useAppStore = create<AppState>()(
                                 id: generateId(),
                                 name,
                                 stories: [],
-                                capacity: defaultCapacity,
+                                categories,
+                                capacities,
                                 createdAt: Date.now(),
                             },
                             ...state.iterations,
@@ -51,12 +73,44 @@ export const useAppStore = create<AppState>()(
                         it.id === id ? { ...it, ...updates } : it
                     ),
                 })),
-            updateIterationCapacity: (id, capacity) =>
+
+            addCategory: (iterationId, name, color) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) => {
+                        if (it.id !== iterationId) return it;
+                        const newCat = { id: generateId(), name, color };
+                        return {
+                            ...it,
+                            categories: [...(it.categories || []), newCat],
+                            capacities: { ...it.capacities, [newCat.id]: 0 } // Default 0 capacity
+                        };
+                    }),
+                })),
+            removeCategory: (iterationId, categoryId) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) => {
+                        if (it.id !== iterationId) return it;
+                        const newCapacities = { ...it.capacities };
+                        delete newCapacities[categoryId];
+                        return {
+                            ...it,
+                            categories: it.categories.filter(c => c.id !== categoryId),
+                            capacities: newCapacities
+                        };
+                    }),
+                })),
+            updateCategoryCapacity: (iterationId, categoryId, capacity) =>
                 set((state) => ({
                     iterations: state.iterations.map((it) =>
-                        it.id === id ? { ...it, capacity } : it
+                        it.id === iterationId
+                            ? {
+                                ...it,
+                                capacities: { ...it.capacities, [categoryId]: capacity }
+                            }
+                            : it
                     ),
                 })),
+
             addStory: (iterationId, title, description) =>
                 set((state) => ({
                     iterations: state.iterations.map((it) =>
@@ -146,6 +200,21 @@ export const useAppStore = create<AppState>()(
         }),
         {
             name: 'pert-storage',
+            // Simple migration to ensure categories exist on load
+            onRehydrateStorage: () => (state) => {
+                if (state) {
+                    state.iterations = state.iterations.map(it => {
+                        if (!it.categories || it.categories.length === 0) {
+                            return {
+                                ...it,
+                                categories: [DEFAULT_CATEGORY],
+                                capacities: { [DEFAULT_CATEGORY.id]: it.capacity || 10 }
+                            };
+                        }
+                        return it;
+                    });
+                }
+            }
         }
     )
 );

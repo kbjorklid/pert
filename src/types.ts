@@ -1,5 +1,12 @@
+export interface EstimateCategory {
+    id: string;
+    name: string;
+    color: string; // Tailwind class or hex code
+}
+
 export interface Estimate {
     id: string;
+    categoryId: string; // New field
     userName: string;
     optimistic: number;
     mostLikely: number;
@@ -18,6 +25,10 @@ export interface Iteration {
     id: string;
     name: string;
     stories: Story[];
+    // New fields
+    categories: EstimateCategory[];
+    capacities: Record<string, number>; // categoryId -> capacity
+    // Legacy support (optional)
     capacity?: number;
     createdAt: number;
 }
