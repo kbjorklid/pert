@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, GripVertical, Settings, X } from 'lucide-react';
-import { calculateStoryEstimate } from '../utils/pert';
+import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, GripVertical, Settings, X, ChevronDown, ChevronUp, BarChart2 } from 'lucide-react';
+import { calculateStoryEstimate, generateProbabilityData } from '../utils/pert';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import {
     DndContext,
     closestCenter,
@@ -134,6 +135,7 @@ export const IterationView: React.FC = () => {
 
     // Confidence Level State
     const [confidenceLevel, setConfidenceLevel] = useState<ConfidenceLevel>('Avg');
+    const [showGraphs, setShowGraphs] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -239,6 +241,49 @@ export const IterationView: React.FC = () => {
         }
     });
 
+    // Calculate aggregated stats for graphs
+    const categoryGraphData = iteration.categories.map(cat => {
+        let totalOptimistic = 0;
+        let totalMostLikely = 0;
+        let totalPessimistic = 0;
+        let hasEstimates = false;
+
+        iteration.stories.forEach(story => {
+            const catEstimates = story.estimates.filter(e => e.categoryId === cat.id);
+            if (catEstimates.length > 0) {
+                hasEstimates = true;
+                const total = catEstimates.reduce((acc, est) => ({
+                    o: acc.o + est.optimistic,
+                    m: acc.m + est.mostLikely,
+                    p: acc.p + est.pessimistic
+                }), { o: 0, m: 0, p: 0 });
+
+                totalOptimistic += total.o / catEstimates.length;
+                totalMostLikely += total.m / catEstimates.length;
+                totalPessimistic += total.p / catEstimates.length;
+            }
+        });
+
+        const chartData = hasEstimates ? generateProbabilityData(totalOptimistic, totalMostLikely, totalPessimistic) : [];
+
+        // Calculate required capacity for the current confidence level
+        const totalEV = totalStats[cat.id].ev;
+        const totalStdDev = Math.sqrt(totalStats[cat.id].var);
+        const requiredCapacity = totalEV + (z * totalStdDev);
+        const availableCapacity = iteration.capacities[cat.id] || 0;
+
+        return {
+            ...cat,
+            chartData,
+            totalOptimistic,
+            totalPessimistic,
+            requiredCapacity,
+            availableCapacity,
+            expectedValue: totalEV,
+            hasEstimates
+        };
+    });
+
     return (
         <div className="space-y-8">
             {/* Header & Title */}
@@ -284,8 +329,8 @@ export const IterationView: React.FC = () => {
                                 key={level}
                                 onClick={() => setConfidenceLevel(level)}
                                 className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${confidenceLevel === level
-                                        ? 'bg-white text-indigo-600 shadow-sm'
-                                        : 'text-slate-500 hover:text-slate-700'
+                                    ? 'bg-white text-indigo-600 shadow-sm'
+                                    : 'text-slate-500 hover:text-slate-700'
                                     }`}
                             >
                                 {level}
@@ -395,6 +440,106 @@ export const IterationView: React.FC = () => {
                         </form>
                     )}
                 </div>
+            </div>
+
+            {/* Graphs Section */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <button
+                    onClick={() => setShowGraphs(!showGraphs)}
+                    className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                    <div className="flex items-center gap-2 font-semibold text-slate-900">
+                        <BarChart2 className="w-5 h-5 text-indigo-600" />
+                        Category Probability Distributions
+                    </div>
+                    {showGraphs ? <ChevronUp className="w-5 h-5 text-slate-500" /> : <ChevronDown className="w-5 h-5 text-slate-500" />}
+                </button>
+
+                {showGraphs && (
+                    <div className="p-6 border-t border-slate-200">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {categoryGraphData.map(catData => (
+                                <div key={catData.id} className="space-y-2">
+                                    <h4 className="font-medium text-slate-900 flex items-center gap-2">
+                                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: catData.color }}></span>
+                                        {catData.name}
+                                    </h4>
+                                    <div className="h-[200px] w-full bg-slate-50 rounded-lg border border-slate-100 relative">
+                                        {catData.hasEstimates && catData.chartData.length > 0 ? (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={catData.chartData} margin={{ top: 30, right: 10, left: 0, bottom: 0 }}>
+                                                    <defs>
+                                                        <linearGradient id={`colorProb-${catData.id}`} x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor={catData.color} stopOpacity={0.3} />
+                                                            <stop offset="95%" stopColor={catData.color} stopOpacity={0} />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                                    <XAxis
+                                                        dataKey="value"
+                                                        type="number"
+                                                        domain={[catData.totalOptimistic, catData.totalPessimistic]}
+                                                        tickFormatter={(val) => val.toFixed(0)}
+                                                        stroke="#94a3b8"
+                                                        fontSize={10}
+                                                        tickCount={5}
+                                                    />
+                                                    <YAxis hide />
+                                                    <Tooltip
+                                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                                                        formatter={(value: number) => [value.toFixed(4), 'Prob']}
+                                                        labelFormatter={(label) => `Est: ${label}`}
+                                                    />
+                                                    <Area
+                                                        type="monotone"
+                                                        dataKey="probability"
+                                                        stroke={catData.color}
+                                                        strokeWidth={2}
+                                                        fillOpacity={1}
+                                                        fill={`url(#colorProb-${catData.id})`}
+                                                    />
+                                                    {/* Cutoff Line (Required Capacity) */}
+                                                    <ReferenceLine
+                                                        x={catData.requiredCapacity}
+                                                        stroke="#ef4444"
+                                                        strokeDasharray="3 3"
+                                                        label={{
+                                                            value: `${confidenceLevel}`,
+                                                            position: 'top',
+                                                            fill: '#ef4444',
+                                                            fontSize: 10
+                                                        }}
+                                                    />
+                                                    {/* Available Capacity Line */}
+                                                    {catData.availableCapacity > 0 && (
+                                                        <ReferenceLine
+                                                            x={catData.availableCapacity}
+                                                            stroke="#10b981"
+                                                            label={{
+                                                                value: 'Cap',
+                                                                position: 'top',
+                                                                fill: '#10b981',
+                                                                fontSize: 10
+                                                            }}
+                                                        />
+                                                    )}
+                                                </AreaChart>
+                                            </ResponsiveContainer>
+                                        ) : (
+                                            <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-400">
+                                                No data
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex justify-between text-xs text-slate-500 px-1">
+                                        <span>Req: {catData.requiredCapacity.toFixed(1)}</span>
+                                        <span>Cap: {catData.availableCapacity}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Stories List */}
