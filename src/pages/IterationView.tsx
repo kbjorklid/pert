@@ -195,7 +195,35 @@ export const IterationView: React.FC = () => {
         });
     });
 
-    // Memoize story cutoff calculation - recalculates when stories, capacities, or confidence changes
+    // Step 1: Cache cumulative Monte Carlo results for story cutoffs - ONLY depends on stories
+    const cumulativeMonteCarloResults = useMemo(() => {
+        const results: Record<string, Record<number, { p50: number, p70: number, p80: number, p95: number }>> = {};
+
+        iteration.categories.forEach(cat => {
+            results[cat.id] = {};
+
+            iteration.stories.forEach((_, storyIndex) => {
+                // Collect all stories up to and including current index for this category
+                const storiesUpToIndex: any[] = [];
+                for (let i = 0; i <= storyIndex; i++) {
+                    const estimates = iteration.stories[i].estimates.filter(e => e.categoryId === cat.id);
+                    if (estimates.length > 0) {
+                        storiesUpToIndex.push(estimates);
+                    }
+                }
+
+                // Run Monte Carlo simulation for cumulative stories and cache all percentiles
+                if (storiesUpToIndex.length > 0) {
+                    const result = generateMonteCarloData(storiesUpToIndex);
+                    results[cat.id][storyIndex] = result.percentiles;
+                }
+            });
+        });
+
+        return results;
+    }, [iteration.stories, iteration.categories]);
+
+    // Step 2: Derive cutoffs from cached Monte Carlo using current capacity/confidence (cheap)
     const cutoffMap = useMemo(() => {
         const categoryCutoffs: Record<string, number> = {};
         iteration.categories.forEach(cat => categoryCutoffs[cat.id] = -1);
@@ -208,30 +236,25 @@ export const IterationView: React.FC = () => {
             '95%': 'p95'
         };
 
-        iteration.stories.forEach((_, index) => {
-            iteration.categories.forEach(cat => {
-                // Collect all stories up to and including current index for this category
-                const storiesUpToIndex: any[] = [];
-                for (let i = 0; i <= index; i++) {
-                    const estimates = iteration.stories[i].estimates.filter(e => e.categoryId === cat.id);
-                    if (estimates.length > 0) {
-                        storiesUpToIndex.push(estimates);
+        iteration.categories.forEach(cat => {
+            const capacity = iteration.capacities[cat.id] || 0;
+            const catResults = cumulativeMonteCarloResults[cat.id];
+
+            if (catResults) {
+                // Find the highest story index where required capacity <= available capacity
+                for (let storyIndex = iteration.stories.length - 1; storyIndex >= 0; storyIndex--) {
+                    const percentiles = catResults[storyIndex];
+                    if (percentiles) {
+                        const percentile = percentileKey[confidenceLevel];
+                        const required = percentiles[percentile];
+
+                        if (required <= capacity) {
+                            categoryCutoffs[cat.id] = storyIndex;
+                            break;
+                        }
                     }
                 }
-
-                // Run Monte Carlo simulation for cumulative stories
-                if (storiesUpToIndex.length > 0) {
-                    const result = generateMonteCarloData(storiesUpToIndex);
-                    const percentile = percentileKey[confidenceLevel];
-                    const required = result.percentiles[percentile];
-
-                    const capacity = iteration.capacities[cat.id] || 0;
-
-                    if (required <= capacity) {
-                        categoryCutoffs[cat.id] = index;
-                    }
-                }
-            });
+            }
         });
 
         // Map cut-offs to indices for rendering
@@ -245,7 +268,7 @@ export const IterationView: React.FC = () => {
         });
 
         return resultMap;
-    }, [iteration.stories, iteration.categories, iteration.capacities, confidenceLevel]);
+    }, [cumulativeMonteCarloResults, iteration.categories, iteration.capacities, confidenceLevel, iteration.stories.length]);
 
     // Step 1: Memoize expensive Monte Carlo calculations - ONLY depends on stories/estimates
     const categoryMonteCarloResults = useMemo(() => {
