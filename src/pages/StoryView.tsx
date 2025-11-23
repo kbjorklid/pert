@@ -21,8 +21,7 @@ export const StoryView: React.FC = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [editTitle, setEditTitle] = useState('');
     const [editDesc, setEditDesc] = useState('');
-    const [isNewUser, setIsNewUser] = useState(false);
-    const [newUserInput, setNewUserInput] = useState('');
+
 
     // Set default category when iteration loads
     React.useEffect(() => {
@@ -33,19 +32,7 @@ export const StoryView: React.FC = () => {
 
     const activeCategory = iteration?.categories.find(c => c.id === selectedCategoryId);
 
-    // Collect all unique usernames from all stories in this iteration
-    const existingUsernames = useMemo(() => {
-        if (!iteration) return [];
-        const names = new Set<string>();
-        iteration.stories.forEach(story => {
-            story.estimates.forEach(est => {
-                if (est.userName && est.userName.trim()) {
-                    names.add(est.userName.trim());
-                }
-            });
-        });
-        return Array.from(names).sort();
-    }, [iteration]);
+
 
     const { expectedValue, standardDeviation, estimatesForCategory } = useMemo(() => {
         if (!story || !selectedCategoryId) {
@@ -85,21 +72,14 @@ export const StoryView: React.FC = () => {
 
     const handleAddEstimate = (e: React.FormEvent) => {
         e.preventDefault();
-        const finalUserName = isNewUser ? newUserInput.trim() : userName;
-        if (finalUserName && optimistic && mostLikely && pessimistic && selectedCategoryId) {
+        if (userName && optimistic && mostLikely && pessimistic && selectedCategoryId) {
             addEstimate(iteration.id, story.id, {
                 categoryId: selectedCategoryId,
-                userName: finalUserName,
+                userName: userName,
                 optimistic: Number(optimistic),
                 mostLikely: Number(mostLikely),
                 pessimistic: Number(pessimistic),
             });
-            // Keep the user name selected for convenience
-            if (isNewUser) {
-                setUserName(finalUserName);
-                setIsNewUser(false);
-                setNewUserInput('');
-            }
             setOptimistic('');
             setMostLikely('');
             setPessimistic('');
@@ -211,50 +191,17 @@ export const StoryView: React.FC = () => {
                         <form onSubmit={handleAddEstimate} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-medium text-slate-500 uppercase mb-1">User Name</label>
-                                {isNewUser ? (
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={newUserInput}
-                                            onChange={(e) => setNewUserInput(e.target.value)}
-                                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                            placeholder="Enter new name"
-                                            autoFocus
-                                            required
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setIsNewUser(false);
-                                                setUserName('');
-                                            }}
-                                            className="px-3 py-2 text-slate-500 hover:text-slate-700 border border-slate-300 rounded-lg"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <select
-                                        value={userName}
-                                        onChange={(e) => {
-                                            if (e.target.value === '__new__') {
-                                                setIsNewUser(true);
-                                                setNewUserInput('');
-                                                setUserName('');
-                                            } else {
-                                                setUserName(e.target.value);
-                                            }
-                                        }}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                        required
-                                    >
-                                        <option value="">Select user...</option>
-                                        {existingUsernames.map(name => (
-                                            <option key={name} value={name}>{name}</option>
-                                        ))}
-                                        <option value="__new__">+ New User...</option>
-                                    </select>
-                                )}
+                                <select
+                                    value={userName}
+                                    onChange={(e) => setUserName(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                    required
+                                >
+                                    <option value="">Select user...</option>
+                                    {iteration.people?.map(person => (
+                                        <option key={person.id} value={person.name}>{person.name}</option>
+                                    ))}
+                                </select>
                             </div>
                             <div className="grid grid-cols-3 gap-2">
                                 <div>

@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Iteration, Estimate, Story, EstimateCategory } from '../types';
+import { Iteration, Estimate, Story, EstimateCategory, Person } from '../types';
 
 interface AppState {
     iterations: Iteration[];
     addIteration: (name: string) => void;
     deleteIteration: (id: string) => void;
     updateIteration: (id: string, updates: Partial<Iteration>) => void;
+    updateTeamAvailability: (id: string, availability: number) => void;
 
     // Category Management
     addCategory: (iterationId: string, name: string, color: string) => void;
@@ -21,6 +22,12 @@ interface AppState {
 
     addEstimate: (iterationId: string, storyId: string, estimate: Omit<Estimate, 'id'>) => void;
     removeEstimate: (iterationId: string, storyId: string, estimateId: string) => void;
+
+    // Person Management
+    addPerson: (iterationId: string, name: string) => void;
+    removePerson: (iterationId: string, personId: string) => void;
+    updatePerson: (iterationId: string, personId: string, updates: { name?: string; availability?: number }) => void;
+    updatePersonCapacity: (iterationId: string, personId: string, categoryId: string, capacity: number) => void;
 }
 
 // Simple UUID generator
@@ -57,6 +64,8 @@ export const useAppStore = create<AppState>()(
                                 name,
                                 stories: [],
                                 categories,
+                                people: [],
+                                teamAvailability: 0.7, // Default 70%
                                 capacities,
                                 createdAt: Date.now(),
                             },
@@ -73,6 +82,25 @@ export const useAppStore = create<AppState>()(
                     iterations: state.iterations.map((it) =>
                         it.id === id ? { ...it, ...updates } : it
                     ),
+                })),
+            updateTeamAvailability: (id, availability) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) => {
+                        if (it.id !== id) return it;
+
+                        // Recalculate all capacities with new team availability
+                        const newCapacities = { ...it.capacities };
+                        it.categories.forEach(cat => {
+                            const rawSum = it.people.reduce((sum, p) => sum + ((p.capacities[cat.id] || 0) * (p.availability ?? 1)), 0);
+                            newCapacities[cat.id] = rawSum * availability;
+                        });
+
+                        return {
+                            ...it,
+                            teamAvailability: availability,
+                            capacities: newCapacities
+                        };
+                    }),
                 })),
 
             addCategory: (iterationId, name, color) =>
@@ -211,10 +239,105 @@ export const useAppStore = create<AppState>()(
                             : it
                     ),
                 })),
+
+            addPerson: (iterationId, name) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) => {
+                        if (it.id !== iterationId) return it;
+                        const newPerson: Person = {
+                            id: generateId(),
+                            name,
+                            capacities: {},
+                            availability: 1.0 // Default 100%
+                        };
+                        // Initialize capacities for existing categories
+                        it.categories.forEach(cat => {
+                            newPerson.capacities[cat.id] = 0;
+                        });
+                        return {
+                            ...it,
+                            people: [...(it.people || []), newPerson]
+                        };
+                    }),
+                })),
+
+            removePerson: (iterationId, personId) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) => {
+                        if (it.id !== iterationId) return it;
+
+                        const updatedPeople = it.people.filter(p => p.id !== personId);
+
+                        // Recalculate all capacities
+                        const newCapacities = { ...it.capacities };
+                        const teamAvail = it.teamAvailability ?? 0.7;
+                        it.categories.forEach(cat => {
+                            newCapacities[cat.id] = updatedPeople.reduce((sum, p) => sum + ((p.capacities[cat.id] || 0) * (p.availability ?? 1)), 0) * teamAvail;
+                        });
+
+                        return {
+                            ...it,
+                            people: updatedPeople,
+                            capacities: newCapacities
+                        };
+                    }),
+                })),
+
+            updatePerson: (iterationId, personId, updates) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) => {
+                        if (it.id !== iterationId) return it;
+
+                        const updatedPeople = it.people.map(p =>
+                            p.id === personId ? { ...p, ...updates } : p
+                        );
+
+                        // Recalculate capacities if availability changed
+                        let newCapacities = it.capacities;
+                        if (updates.availability !== undefined) {
+                            newCapacities = { ...it.capacities };
+                            const teamAvail = it.teamAvailability ?? 0.7;
+                            it.categories.forEach(cat => {
+                                newCapacities[cat.id] = updatedPeople.reduce((sum, p) => sum + ((p.capacities[cat.id] || 0) * (p.availability ?? 1)), 0) * teamAvail;
+                            });
+                        }
+
+                        return {
+                            ...it,
+                            people: updatedPeople,
+                            capacities: newCapacities
+                        };
+                    }),
+                })),
+
+            updatePersonCapacity: (iterationId, personId, categoryId, capacity) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) => {
+                        if (it.id !== iterationId) return it;
+
+                        const updatedPeople = it.people.map(p => {
+                            if (p.id !== personId) return p;
+                            return {
+                                ...p,
+                                capacities: { ...p.capacities, [categoryId]: capacity }
+                            };
+                        });
+
+                        // Recalculate total capacity for the category
+                        const teamAvail = it.teamAvailability ?? 0.7;
+                        const totalCapacity = updatedPeople.reduce((sum, p) => sum + ((p.capacities[categoryId] || 0) * (p.availability ?? 1)), 0) * teamAvail;
+
+                        return {
+                            ...it,
+                            people: updatedPeople,
+                            capacities: { ...it.capacities, [categoryId]: totalCapacity }
+                        };
+                    }),
+                })),
+
         }),
         {
             name: 'pert-storage',
-            // Simple migration to ensure categories exist on load
             onRehydrateStorage: () => (state) => {
                 if (state) {
                     state.iterations = state.iterations.map(it => {
@@ -222,8 +345,27 @@ export const useAppStore = create<AppState>()(
                             return {
                                 ...it,
                                 categories: [DEFAULT_CATEGORY],
+                                people: [],
                                 capacities: { [DEFAULT_CATEGORY.id]: it.capacity || 10 }
                             };
+                        }
+                        if (!it.people) {
+                            // Migration: Create a "Team" person with the legacy capacities if they exist
+                            const legacyPeople: Person[] = [];
+                            if (it.capacities && Object.values(it.capacities).some(v => v > 0)) {
+                                legacyPeople.push({
+                                    id: generateId(),
+                                    name: 'Team (Legacy)',
+                                    capacities: { ...it.capacities },
+                                    availability: 1.0
+                                });
+                            }
+                            // Migration: Set team availability to 1.0 for existing iterations to preserve values
+                            return { ...it, people: legacyPeople, teamAvailability: 1.0 };
+                        }
+                        // Ensure teamAvailability exists
+                        if (it.teamAvailability === undefined) {
+                            return { ...it, teamAvailability: 1.0 }; // Default to 1.0 for existing to avoid drop
                         }
                         return it;
                     });
