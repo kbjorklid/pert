@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, Calendar, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Calendar, ChevronRight, Copy } from 'lucide-react';
 
 
 export const Dashboard: React.FC = () => {
-    const { iterations, addIteration, deleteIteration } = useAppStore();
+    const { iterations, addIteration, deleteIteration, duplicateIteration } = useAppStore();
     const [isCreating, setIsCreating] = useState(false);
     const [newIterationName, setNewIterationName] = useState('');
 
@@ -97,6 +97,13 @@ export const Dashboard: React.FC = () => {
                                 >
                                     <ChevronRight className="w-5 h-5" />
                                 </Link>
+                                <button
+                                    onClick={() => duplicateIteration(iteration.id)}
+                                    className="text-slate-400 hover:text-indigo-600 transition-colors p-2 hover:bg-indigo-50 rounded-lg"
+                                    title="Duplicate Iteration"
+                                >
+                                    <Copy className="w-4 h-4" />
+                                </button>
                                 <button
                                     onClick={() => deleteIteration(iteration.id)}
                                     className="text-slate-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"

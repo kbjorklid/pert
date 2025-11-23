@@ -7,6 +7,7 @@ interface AppState {
     addIteration: (name: string) => void;
     deleteIteration: (id: string) => void;
     updateIteration: (id: string, updates: Partial<Iteration>) => void;
+    duplicateIteration: (id: string) => void;
     updateTeamAvailability: (id: string, availability: number) => void;
 
     // Category Management
@@ -77,6 +78,34 @@ export const useAppStore = create<AppState>()(
                 set((state) => ({
                     iterations: state.iterations.filter((it) => it.id !== id),
                 })),
+            duplicateIteration: (id) =>
+                set((state) => {
+                    const sourceIteration = state.iterations.find((it) => it.id === id);
+                    if (!sourceIteration) return state;
+
+                    const newIteration: Iteration = {
+                        ...sourceIteration,
+                        id: generateId(),
+                        name: `${sourceIteration.name} (Copy)`,
+                        createdAt: Date.now(),
+                        stories: sourceIteration.stories.map((story) => ({
+                            ...story,
+                            id: generateId(),
+                            estimates: story.estimates.map((est) => ({
+                                ...est,
+                                id: generateId(),
+                            })),
+                        })),
+                        people: sourceIteration.people.map((person) => ({
+                            ...person,
+                            id: generateId(),
+                        })),
+                    };
+
+                    return {
+                        iterations: [newIteration, ...state.iterations],
+                    };
+                }),
             updateIteration: (id, updates) =>
                 set((state) => ({
                     iterations: state.iterations.map((it) =>
