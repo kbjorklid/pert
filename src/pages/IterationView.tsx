@@ -21,7 +21,7 @@ import {
     useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Story, EstimateCategory } from '../types';
+import { Story, EstimateCategory, Estimate } from '../types';
 
 // Sortable Story Item Component
 const SortableStoryItem = ({
@@ -212,18 +212,31 @@ export const IterationView: React.FC = () => {
         });
     });
 
-    // Step 1: Cache cumulative Monte Carlo results for story cutoffs - ONLY depends on stories
+    // Optimization: Create stable dependencies for expensive calculations
+    // We only want to re-run simulations if the actual numbers (estimates) or structure (categories) change.
+    // We do NOT want to re-run if just a title or color changes.
+    const estimatesString = useMemo(() => {
+        return JSON.stringify(iteration.stories.map(s => s.estimates));
+    }, [iteration.stories]);
+
+    const categoryIdsString = useMemo(() => {
+        return iteration.categories.map(c => c.id).join(',');
+    }, [iteration.categories]);
+
+    // Step 1: Cache cumulative Monte Carlo results for story cutoffs - ONLY depends on estimates/structure
     const cumulativeMonteCarloResults = useMemo(() => {
         const results: Record<string, Record<number, { p50: number, p70: number, p80: number, p95: number }>> = {};
+        const allEstimates = JSON.parse(estimatesString) as Estimate[][];
+        const categoryIds = categoryIdsString.split(',');
 
-        iteration.categories.forEach(cat => {
-            results[cat.id] = {};
+        categoryIds.forEach(catId => {
+            results[catId] = {};
 
-            iteration.stories.forEach((_, storyIndex) => {
+            allEstimates.forEach((_, storyIndex) => {
                 // Collect all stories up to and including current index for this category
                 const storiesUpToIndex: any[] = [];
                 for (let i = 0; i <= storyIndex; i++) {
-                    const estimates = iteration.stories[i].estimates.filter(e => e.categoryId === cat.id);
+                    const estimates = allEstimates[i].filter((e: Estimate) => e.categoryId === catId);
                     if (estimates.length > 0) {
                         storiesUpToIndex.push(estimates);
                     }
@@ -232,13 +245,13 @@ export const IterationView: React.FC = () => {
                 // Run Monte Carlo simulation for cumulative stories and cache all percentiles
                 if (storiesUpToIndex.length > 0) {
                     const result = generateMonteCarloData(storiesUpToIndex);
-                    results[cat.id][storyIndex] = result.percentiles;
+                    results[catId][storyIndex] = result.percentiles;
                 }
             });
         });
 
         return results;
-    }, [iteration.stories, iteration.categories]);
+    }, [estimatesString, categoryIdsString]);
 
     // Step 2: Derive cutoffs from cached Monte Carlo using current capacity/confidence (cheap)
     const cutoffMap = useMemo(() => {
@@ -287,14 +300,17 @@ export const IterationView: React.FC = () => {
         return resultMap;
     }, [cumulativeMonteCarloResults, iteration.categories, iteration.capacities, confidenceLevel, iteration.stories.length]);
 
-    // Step 1: Memoize expensive Monte Carlo calculations - ONLY depends on stories/estimates
+    // Step 1: Memoize expensive Monte Carlo calculations - ONLY depends on estimates/structure
     const categoryMonteCarloResults = useMemo(() => {
-        return iteration.categories.map(cat => {
+        const allEstimates = JSON.parse(estimatesString) as Estimate[][];
+        const categoryIds = categoryIdsString.split(',');
+
+        return categoryIds.map(catId => {
             const storiesEstimates: any[] = [];
             let hasEstimates = false;
 
-            iteration.stories.forEach(story => {
-                const catEstimates = story.estimates.filter(e => e.categoryId === cat.id);
+            allEstimates.forEach(storyEstimates => {
+                const catEstimates = storyEstimates.filter((e: Estimate) => e.categoryId === catId);
                 if (catEstimates.length > 0) {
                     hasEstimates = true;
                     storiesEstimates.push(catEstimates);
@@ -304,7 +320,7 @@ export const IterationView: React.FC = () => {
             const result = hasEstimates ? generateMonteCarloData(storiesEstimates) : { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
 
             return {
-                categoryId: cat.id,
+                categoryId: catId,
                 chartData: result.data,
                 percentiles: result.percentiles,
                 hasEstimates,
@@ -312,7 +328,7 @@ export const IterationView: React.FC = () => {
                 maxVal: result.data.length > 0 ? result.data[result.data.length - 1].value : 100
             };
         });
-    }, [iteration.stories, iteration.categories]);
+    }, [estimatesString, categoryIdsString]);
 
     // Step 2: Derive required capacity from confidence level (cheap - just percentile lookup)
     const categoryGraphData = useMemo(() => {
@@ -581,7 +597,7 @@ export const IterationView: React.FC = () => {
 
                                 <div className="flex items-center justify-between text-sm">
                                     <div className="text-slate-500">Total Capacity:</div>
-                                    <div className="font-semibold text-slate-900">{availableCapacity}</div>
+                                    <div className="font-semibold text-slate-900">{availableCapacity.toFixed(1)}</div>
                                 </div>
                                 <div className="flex items-center justify-between text-sm mt-1">
                                     <div className="text-slate-500">Required:</div>
@@ -707,7 +723,7 @@ export const IterationView: React.FC = () => {
                                     </div>
                                     <div className="flex justify-between text-xs text-slate-500 px-1">
                                         <span>Req: {catData.requiredCapacity.toFixed(1)}</span>
-                                        <span>Cap: {catData.availableCapacity}</span>
+                                        <span>Cap: {catData.availableCapacity.toFixed(1)}</span>
                                     </div>
                                 </div>
                             ))}

@@ -29,6 +29,9 @@ interface AppState {
     removePerson: (iterationId: string, personId: string) => void;
     updatePerson: (iterationId: string, personId: string, updates: { name?: string; availability?: number }) => void;
     updatePersonCapacity: (iterationId: string, personId: string, categoryId: string, capacity: number) => void;
+
+    // Data Management
+    importData: (data: AppState, mode: 'replace' | 'add') => void;
 }
 
 // Simple UUID generator
@@ -363,6 +366,51 @@ export const useAppStore = create<AppState>()(
                         };
                     }),
                 })),
+
+            importData: (data, mode) =>
+                set((state) => {
+                    if (mode === 'replace') {
+                        return {
+                            iterations: data.iterations,
+                        };
+                    }
+
+                    // Mode is 'add'
+                    const newIterations = [...state.iterations];
+                    const existingNames = new Set(state.iterations.map((it) => it.name));
+
+                    data.iterations.forEach((importedIteration) => {
+                        let newName = importedIteration.name;
+                        while (existingNames.has(newName)) {
+                            newName += ' (imported)';
+                        }
+                        existingNames.add(newName);
+
+                        // Deep copy with new IDs to avoid collisions
+                        const newIteration: Iteration = {
+                            ...importedIteration,
+                            id: generateId(),
+                            name: newName,
+                            stories: importedIteration.stories.map((story) => ({
+                                ...story,
+                                id: generateId(),
+                                estimates: story.estimates.map((est) => ({
+                                    ...est,
+                                    id: generateId(),
+                                })),
+                            })),
+                            people: importedIteration.people.map((person) => ({
+                                ...person,
+                                id: generateId(),
+                            })),
+                        };
+                        newIterations.push(newIteration);
+                    });
+
+                    return {
+                        iterations: newIterations,
+                    };
+                }),
 
         }),
         {
