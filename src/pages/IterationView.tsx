@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, GripVertical, Settings, X, ChevronDown, ChevronUp, BarChart2 } from 'lucide-react';
@@ -195,98 +195,112 @@ export const IterationView: React.FC = () => {
         });
     });
 
-    // Initialize cut-offs
-    const categoryCutoffs: Record<string, number> = {};
-    iteration.categories.forEach(cat => categoryCutoffs[cat.id] = -1);
+    // Memoize story cutoff calculation - recalculates when stories, capacities, or confidence changes
+    const cutoffMap = useMemo(() => {
+        const categoryCutoffs: Record<string, number> = {};
+        iteration.categories.forEach(cat => categoryCutoffs[cat.id] = -1);
 
-    // Percentile mapping for confidence levels
-    const percentileKey: Record<ConfidenceLevel, 'p50' | 'p70' | 'p80' | 'p95'> = {
-        'Avg': 'p50',
-        '70%': 'p70',
-        '80%': 'p80',
-        '95%': 'p95'
-    };
+        // Percentile mapping for confidence levels
+        const percentileKey: Record<ConfidenceLevel, 'p50' | 'p70' | 'p80' | 'p95'> = {
+            'Avg': 'p50',
+            '70%': 'p70',
+            '80%': 'p80',
+            '95%': 'p95'
+        };
 
-    iteration.stories.forEach((_, index) => {
-        iteration.categories.forEach(cat => {
-            // Collect all stories up to and including current index for this category
-            const storiesUpToIndex: any[] = [];
-            for (let i = 0; i <= index; i++) {
-                const estimates = iteration.stories[i].estimates.filter(e => e.categoryId === cat.id);
-                if (estimates.length > 0) {
-                    storiesUpToIndex.push(estimates);
+        iteration.stories.forEach((_, index) => {
+            iteration.categories.forEach(cat => {
+                // Collect all stories up to and including current index for this category
+                const storiesUpToIndex: any[] = [];
+                for (let i = 0; i <= index; i++) {
+                    const estimates = iteration.stories[i].estimates.filter(e => e.categoryId === cat.id);
+                    if (estimates.length > 0) {
+                        storiesUpToIndex.push(estimates);
+                    }
                 }
-            }
 
-            // Run Monte Carlo simulation for cumulative stories
-            if (storiesUpToIndex.length > 0) {
-                const result = generateMonteCarloData(storiesUpToIndex);
-                const percentile = percentileKey[confidenceLevel];
-                const required = result.percentiles[percentile];
+                // Run Monte Carlo simulation for cumulative stories
+                if (storiesUpToIndex.length > 0) {
+                    const result = generateMonteCarloData(storiesUpToIndex);
+                    const percentile = percentileKey[confidenceLevel];
+                    const required = result.percentiles[percentile];
 
-                const capacity = iteration.capacities[cat.id] || 0;
+                    const capacity = iteration.capacities[cat.id] || 0;
 
-                if (required <= capacity) {
-                    categoryCutoffs[cat.id] = index;
+                    if (required <= capacity) {
+                        categoryCutoffs[cat.id] = index;
+                    }
                 }
-            }
+            });
         });
-    });
 
-    // Map cut-offs to indices for rendering
-    const cutoffMap: Record<number, string[]> = {};
-    Object.entries(categoryCutoffs).forEach(([catId, cutoffIndex]) => {
-        const cat = iteration.categories.find(c => c.id === catId);
-        if (cat) {
-            if (!cutoffMap[cutoffIndex]) cutoffMap[cutoffIndex] = [];
-            cutoffMap[cutoffIndex].push(cat.name);
-        }
-    });
-
-    // Calculate aggregated stats for graphs
-    const categoryGraphData = iteration.categories.map(cat => {
-        const storiesEstimates: any[] = [];
-        let hasEstimates = false;
-
-        iteration.stories.forEach(story => {
-            const catEstimates = story.estimates.filter(e => e.categoryId === cat.id);
-            if (catEstimates.length > 0) {
-                hasEstimates = true;
-                storiesEstimates.push(catEstimates);
+        // Map cut-offs to indices for rendering
+        const resultMap: Record<number, string[]> = {};
+        Object.entries(categoryCutoffs).forEach(([catId, cutoffIndex]) => {
+            const cat = iteration.categories.find(c => c.id === catId);
+            if (cat) {
+                if (!resultMap[cutoffIndex]) resultMap[cutoffIndex] = [];
+                resultMap[cutoffIndex].push(cat.name);
             }
         });
 
-        const result = hasEstimates ? generateMonteCarloData(storiesEstimates) : { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
-        const chartData = result.data;
-        const percentiles = result.percentiles;
+        return resultMap;
+    }, [iteration.stories, iteration.categories, iteration.capacities, confidenceLevel]);
 
-        // Map confidence level to percentile
-        const percentileMap: Record<ConfidenceLevel, number> = {
-            'Avg': percentiles.p50,
-            '70%': percentiles.p70,
-            '80%': percentiles.p80,
-            '95%': percentiles.p95
+    // Step 1: Memoize expensive Monte Carlo calculations - ONLY depends on stories/estimates
+    const categoryMonteCarloResults = useMemo(() => {
+        return iteration.categories.map(cat => {
+            const storiesEstimates: any[] = [];
+            let hasEstimates = false;
+
+            iteration.stories.forEach(story => {
+                const catEstimates = story.estimates.filter(e => e.categoryId === cat.id);
+                if (catEstimates.length > 0) {
+                    hasEstimates = true;
+                    storiesEstimates.push(catEstimates);
+                }
+            });
+
+            const result = hasEstimates ? generateMonteCarloData(storiesEstimates) : { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
+
+            return {
+                categoryId: cat.id,
+                chartData: result.data,
+                percentiles: result.percentiles,
+                hasEstimates,
+                minVal: result.data.length > 0 ? result.data[0].value : 0,
+                maxVal: result.data.length > 0 ? result.data[result.data.length - 1].value : 100
+            };
+        });
+    }, [iteration.stories, iteration.categories]);
+
+    // Step 2: Derive required capacity from confidence level (cheap - just percentile lookup)
+    const categoryGraphData = useMemo(() => {
+        const percentileKey: Record<ConfidenceLevel, 'p50' | 'p70' | 'p80' | 'p95'> = {
+            'Avg': 'p50',
+            '70%': 'p70',
+            '80%': 'p80',
+            '95%': 'p95'
         };
 
-        // Use Monte Carlo percentile for required capacity instead of z-score
-        const requiredCapacity = hasEstimates ? percentileMap[confidenceLevel] : 0;
-        const availableCapacity = iteration.capacities[cat.id] || 0;
+        return iteration.categories.map((cat, index) => {
+            const mcResult = categoryMonteCarloResults[index];
+            const percentile = percentileKey[confidenceLevel];
+            const requiredCapacity = mcResult.hasEstimates ? mcResult.percentiles[percentile] : 0;
+            const availableCapacity = iteration.capacities[cat.id] || 0;
 
-        // Calculate min/max for X-axis domain from chart data
-        const minVal = chartData.length > 0 ? chartData[0].value : 0;
-        const maxVal = chartData.length > 0 ? chartData[chartData.length - 1].value : 100;
-
-        return {
-            ...cat,
-            chartData,
-            minVal,
-            maxVal,
-            requiredCapacity,
-            availableCapacity,
-            expectedValue: totalStats[cat.id].ev,
-            hasEstimates
-        };
-    });
+            return {
+                ...cat,
+                chartData: mcResult.chartData,
+                minVal: mcResult.minVal,
+                maxVal: mcResult.maxVal,
+                requiredCapacity,
+                availableCapacity,
+                expectedValue: totalStats[cat.id].ev,
+                hasEstimates: mcResult.hasEstimates
+            };
+        });
+    }, [categoryMonteCarloResults, iteration.categories, confidenceLevel, iteration.capacities, totalStats]);
 
     return (
         <div className="space-y-8">
