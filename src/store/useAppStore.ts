@@ -11,6 +11,7 @@ interface AppState {
     // Category Management
     addCategory: (iterationId: string, name: string, color: string) => void;
     removeCategory: (iterationId: string, categoryId: string) => void;
+    updateCategory: (iterationId: string, categoryId: string, updates: { name?: string; color?: string }) => void;
     updateCategoryCapacity: (iterationId: string, categoryId: string, capacity: number) => void;
 
     addStory: (iterationId: string, title: string, description?: string) => void;
@@ -25,7 +26,7 @@ interface AppState {
 // Simple UUID generator
 const generateId = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
-const DEFAULT_CATEGORY: EstimateCategory = { id: 'default', name: 'Default', color: 'bg-indigo-500' };
+const DEFAULT_CATEGORY: EstimateCategory = { id: 'default', name: 'Default', color: '#6366f1' };
 
 export const useAppStore = create<AppState>()(
     persist(
@@ -98,6 +99,19 @@ export const useAppStore = create<AppState>()(
                             capacities: newCapacities
                         };
                     }),
+                })),
+            updateCategory: (iterationId, categoryId, updates) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === iterationId
+                            ? {
+                                ...it,
+                                categories: it.categories.map((c) =>
+                                    c.id === categoryId ? { ...c, ...updates } : c
+                                ),
+                            }
+                            : it
+                    ),
                 })),
             updateCategoryCapacity: (iterationId, categoryId, capacity) =>
                 set((state) => ({

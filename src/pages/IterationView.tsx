@@ -115,6 +115,7 @@ export const IterationView: React.FC = () => {
         updateIteration,
         addCategory,
         removeCategory,
+        updateCategory,
         updateCategoryCapacity
     } = useAppStore();
 
@@ -319,14 +320,34 @@ export const IterationView: React.FC = () => {
                         return (
                             <div key={cat.id} className={`flex flex-col p-3 rounded-lg border ${isOver ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
                                 <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></div>
-                                        <span className="font-medium text-slate-700">{cat.name}</span>
+                                    <div className="flex items-center gap-2 flex-1">
+                                        {isManagingCats ? (
+                                            <>
+                                                <input
+                                                    type="color"
+                                                    className="w-5 h-5 rounded cursor-pointer border-none p-0"
+                                                    value={cat.color}
+                                                    onChange={(e) => updateCategory(iteration.id, cat.id, { color: e.target.value })}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    className="font-medium text-slate-700 bg-transparent border-b border-slate-300 focus:border-indigo-500 outline-none w-full"
+                                                    value={cat.name}
+                                                    onChange={(e) => updateCategory(iteration.id, cat.id, { name: e.target.value })}
+                                                />
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></div>
+                                                <span className="font-medium text-slate-700">{cat.name}</span>
+                                            </>
+                                        )}
                                     </div>
                                     {isManagingCats && (
                                         <button
                                             onClick={() => removeCategory(iteration.id, cat.id)}
-                                            className="text-slate-400 hover:text-red-600"
+                                            className="text-slate-400 hover:text-red-600 ml-2"
+                                            title="Remove Category"
                                         >
                                             <X className="w-4 h-4" />
                                         </button>
