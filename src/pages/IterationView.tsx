@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, GripVertical, Settings, X, ChevronDown, ChevronUp, BarChart2 } from 'lucide-react';
-import { calculateStoryEstimate, generateProbabilityData } from '../utils/pert';
+import { calculateStoryEstimate, generateMonteCarloData } from '../utils/pert';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import {
     DndContext,
@@ -243,28 +243,18 @@ export const IterationView: React.FC = () => {
 
     // Calculate aggregated stats for graphs
     const categoryGraphData = iteration.categories.map(cat => {
-        let totalOptimistic = 0;
-        let totalMostLikely = 0;
-        let totalPessimistic = 0;
+        const storiesEstimates: any[] = [];
         let hasEstimates = false;
 
         iteration.stories.forEach(story => {
             const catEstimates = story.estimates.filter(e => e.categoryId === cat.id);
             if (catEstimates.length > 0) {
                 hasEstimates = true;
-                const total = catEstimates.reduce((acc, est) => ({
-                    o: acc.o + est.optimistic,
-                    m: acc.m + est.mostLikely,
-                    p: acc.p + est.pessimistic
-                }), { o: 0, m: 0, p: 0 });
-
-                totalOptimistic += total.o / catEstimates.length;
-                totalMostLikely += total.m / catEstimates.length;
-                totalPessimistic += total.p / catEstimates.length;
+                storiesEstimates.push(catEstimates);
             }
         });
 
-        const chartData = hasEstimates ? generateProbabilityData(totalOptimistic, totalMostLikely, totalPessimistic) : [];
+        const chartData = hasEstimates ? generateMonteCarloData(storiesEstimates) : [];
 
         // Calculate required capacity for the current confidence level
         const totalEV = totalStats[cat.id].ev;
@@ -272,11 +262,15 @@ export const IterationView: React.FC = () => {
         const requiredCapacity = totalEV + (z * totalStdDev);
         const availableCapacity = iteration.capacities[cat.id] || 0;
 
+        // Calculate min/max for X-axis domain from chart data
+        const minVal = chartData.length > 0 ? chartData[0].value : 0;
+        const maxVal = chartData.length > 0 ? chartData[chartData.length - 1].value : 100;
+
         return {
             ...cat,
             chartData,
-            totalOptimistic,
-            totalPessimistic,
+            minVal,
+            maxVal,
             requiredCapacity,
             availableCapacity,
             expectedValue: totalEV,
@@ -478,7 +472,7 @@ export const IterationView: React.FC = () => {
                                                     <XAxis
                                                         dataKey="value"
                                                         type="number"
-                                                        domain={[catData.totalOptimistic, catData.totalPessimistic]}
+                                                        domain={[catData.minVal, catData.maxVal]}
                                                         tickFormatter={(val) => val.toFixed(0)}
                                                         stroke="#94a3b8"
                                                         fontSize={10}
