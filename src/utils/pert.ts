@@ -90,6 +90,7 @@ export const calculateConfidenceIntervals = (expectedValue: number, standardDevi
     // Z-scores for Normal Distribution
     const z95 = 1.960;
     const z80 = 1.282;
+    const z70 = 1.036;
     const z50 = 0.674;
 
     return {
@@ -100,6 +101,10 @@ export const calculateConfidenceIntervals = (expectedValue: number, standardDevi
         ci80: {
             min: Math.max(0, expectedValue - z80 * standardDeviation),
             max: expectedValue + z80 * standardDeviation
+        },
+        ci70: {
+            min: Math.max(0, expectedValue - z70 * standardDeviation),
+            max: expectedValue + z70 * standardDeviation
         },
         ci50: {
             min: Math.max(0, expectedValue - z50 * standardDeviation),

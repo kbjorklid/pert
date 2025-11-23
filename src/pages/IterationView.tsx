@@ -28,13 +28,15 @@ const SortableStoryItem = ({
     iterationId,
     deleteStory,
     expectedValue,
-    isOverCapacity
+    isOverCapacity,
+    confidenceLevel
 }: {
     story: Story;
     iterationId: string;
     deleteStory: (itId: string, sId: string) => void;
     expectedValue: number;
     isOverCapacity: boolean;
+    confidenceLevel: number;
 }) => {
     const {
         attributes,
@@ -72,7 +74,7 @@ const SortableStoryItem = ({
                             )}
                             {isOverCapacity && (
                                 <div className="text-xs text-red-600 font-medium mt-1 flex items-center gap-1">
-                                    Exceeds Capacity
+                                    Exceeds Capacity ({confidenceLevel}%)
                                 </div>
                             )}
                         </div>
@@ -119,7 +121,7 @@ export const IterationView: React.FC = () => {
     const [isCreating, setIsCreating] = useState(false);
     const [newStoryTitle, setNewStoryTitle] = useState('');
     const [newStoryDesc, setNewStoryDesc] = useState('');
-    const [confidenceLevel, setConfidenceLevel] = useState<50 | 80 | 95>(95);
+    const [confidenceLevel, setConfidenceLevel] = useState<50 | 70 | 80 | 95>(95);
     const [isEditingCapacity, setIsEditingCapacity] = useState(false);
     const [capacityInput, setCapacityInput] = useState('');
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -182,8 +184,59 @@ export const IterationView: React.FC = () => {
         }
     };
 
-    let cumulativeExpectedValue = 0;
-    const capacity = iteration.capacity || 10; // Default capacity if undefined
+    const capacity = iteration.capacity || 10;
+
+    // --- Advanced Capacity Cut-off Logic ---
+    const cutoffMap: Record<number, string[]> = {};
+    let cumEV = 0;
+    let cumVar = 0;
+
+    // Z-scores for confidence levels
+    const zScores = {
+        '50%': 0.674,
+        '70%': 1.036,
+        '80%': 1.282,
+        '95%': 1.960
+    };
+
+    // Initialize cut-off indices to -1
+    const cutoffs = {
+        Avg: -1,
+        '50%': -1,
+        '70%': -1,
+        '80%': -1,
+        '95%': -1
+    };
+
+    iteration.stories.forEach((s, i) => {
+        const stats = calculateStoryEstimate(s.estimates);
+        cumEV += stats.expectedValue;
+        cumVar += Math.pow(stats.standardDeviation, 2);
+        const cumStdDev = Math.sqrt(cumVar);
+
+        if (cumEV <= capacity) cutoffs.Avg = i;
+        if (cumEV + zScores['50%'] * cumStdDev <= capacity) cutoffs['50%'] = i;
+        if (cumEV + zScores['70%'] * cumStdDev <= capacity) cutoffs['70%'] = i;
+        if (cumEV + zScores['80%'] * cumStdDev <= capacity) cutoffs['80%'] = i;
+        if (cumEV + zScores['95%'] * cumStdDev <= capacity) cutoffs['95%'] = i;
+    });
+
+    // Group levels by their cut-off index
+    Object.entries(cutoffs).forEach(([label, index]) => {
+        if (!cutoffMap[index]) cutoffMap[index] = [];
+        cutoffMap[index].push(label);
+    });
+
+    // Sort labels
+    Object.values(cutoffMap).forEach(labels => {
+        labels.sort((a, b) => {
+            const order = { 'Avg': 1, '50%': 2, '70%': 3, '80%': 4, '95%': 5 };
+            return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+        });
+    });
+
+    let runningEV = 0;
+    let runningVar = 0;
 
     return (
         <div className="space-y-8">
@@ -274,10 +327,10 @@ export const IterationView: React.FC = () => {
                             <div className="flex justify-between items-start mb-2">
                                 <div className="text-indigo-300 text-xs font-medium uppercase">{confidenceLevel}% Confidence Interval</div>
                                 <div className="flex bg-indigo-900/50 rounded-lg p-0.5 border border-indigo-700/50">
-                                    {[50, 80, 95].map((level) => (
+                                    {[50, 70, 80, 95].map((level) => (
                                         <button
                                             key={level}
-                                            onClick={() => setConfidenceLevel(level as 50 | 80 | 95)}
+                                            onClick={() => setConfidenceLevel(level as 50 | 70 | 80 | 95)}
                                             className={`px-2 py-0.5 text-xs font-medium rounded-md transition-colors ${confidenceLevel === level
                                                 ? 'bg-indigo-600 text-white shadow-sm'
                                                 : 'text-indigo-300 hover:text-white hover:bg-indigo-800'
@@ -375,11 +428,28 @@ export const IterationView: React.FC = () => {
                             items={iteration.stories.map(s => s.id)}
                             strategy={verticalListSortingStrategy}
                         >
+                            {/* Check for cut-off BEFORE the first story (index -1) */}
+                            {cutoffMap[-1] && (
+                                <div className={`relative py-4 flex items-center justify-center ${cutoffMap[-1].includes(confidenceLevel + '%') ? 'opacity-100' : 'opacity-60'}`}>
+                                    <div className={`absolute inset-x-0 top-1/2 border-t-2 border-dashed ${cutoffMap[-1].includes(confidenceLevel + '%') ? 'border-red-500' : 'border-red-300'}`}></div>
+                                    <span className={`relative px-3 py-1 rounded-full border text-xs font-bold uppercase tracking-wider shadow-sm ${cutoffMap[-1].includes(confidenceLevel + '%')
+                                            ? 'bg-red-50 border-red-500 text-red-700 ring-2 ring-red-200'
+                                            : 'bg-slate-50 border-red-200 text-red-500'
+                                        }`}>
+                                        Capacity Cut-off ({cutoffMap[-1].join(', ')})
+                                    </span>
+                                </div>
+                            )}
+
                             {iteration.stories.map((story, index) => {
-                                const { expectedValue } = calculateStoryEstimate(story.estimates);
-                                cumulativeExpectedValue += expectedValue;
-                                const isOverCapacity = cumulativeExpectedValue > capacity;
-                                const showCutoff = !isOverCapacity && (cumulativeExpectedValue + (iteration.stories[index + 1] ? calculateStoryEstimate(iteration.stories[index + 1].estimates).expectedValue : 0)) > capacity;
+                                const { expectedValue, standardDeviation } = calculateStoryEstimate(story.estimates);
+                                runningEV += expectedValue;
+                                runningVar += Math.pow(standardDeviation, 2);
+                                const runningStdDev = Math.sqrt(runningVar);
+
+                                // Calculate if over capacity based on SELECTED confidence level
+                                const zSelected = zScores[`${confidenceLevel}%` as keyof typeof zScores];
+                                const isOverCapacity = (runningEV + zSelected * runningStdDev) > capacity;
 
                                 return (
                                     <React.Fragment key={story.id}>
@@ -389,12 +459,17 @@ export const IterationView: React.FC = () => {
                                             deleteStory={deleteStory}
                                             expectedValue={expectedValue}
                                             isOverCapacity={isOverCapacity}
+                                            confidenceLevel={confidenceLevel}
                                         />
-                                        {showCutoff && (
-                                            <div className="relative py-2 flex items-center justify-center">
-                                                <div className="absolute inset-x-0 top-1/2 border-t-2 border-dashed border-red-300"></div>
-                                                <span className="relative bg-slate-50 px-2 text-xs font-bold text-red-500 uppercase tracking-wider">
-                                                    Capacity Cut-off ({capacity})
+                                        {/* Check for cut-off AFTER this story (index) */}
+                                        {cutoffMap[index] && (
+                                            <div className={`relative py-4 flex items-center justify-center ${cutoffMap[index].includes(confidenceLevel + '%') ? 'opacity-100' : 'opacity-60'}`}>
+                                                <div className={`absolute inset-x-0 top-1/2 border-t-2 border-dashed ${cutoffMap[index].includes(confidenceLevel + '%') ? 'border-red-500' : 'border-red-300'}`}></div>
+                                                <span className={`relative px-3 py-1 rounded-full border text-xs font-bold uppercase tracking-wider shadow-sm ${cutoffMap[index].includes(confidenceLevel + '%')
+                                                        ? 'bg-red-50 border-red-500 text-red-700 ring-2 ring-red-200'
+                                                        : 'bg-slate-50 border-red-200 text-red-500'
+                                                    }`}>
+                                                    Capacity Cut-off ({cutoffMap[index].join(', ')})
                                                 </span>
                                             </div>
                                         )}
