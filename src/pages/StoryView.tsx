@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { ArrowLeft, Plus, Trash2, Users, Calculator, Save, Edit2, X } from 'lucide-react';
-import { calculateStoryEstimate, calculatePERT, generateProbabilityData, calculateConfidenceIntervals } from '../utils/pert';
+import { calculateStoryEstimate, calculatePERT, generateMonteCarloData, calculateConfidenceIntervals } from '../utils/pert';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 export const StoryView: React.FC = () => {
@@ -31,38 +31,29 @@ export const StoryView: React.FC = () => {
 
     const activeCategory = iteration?.categories.find(c => c.id === selectedCategoryId);
 
-    const { expectedValue, standardDeviation, avgOptimistic, avgMostLikely, avgPessimistic, estimatesForCategory } = useMemo(() => {
+    const { expectedValue, standardDeviation, estimatesForCategory } = useMemo(() => {
         if (!story || !selectedCategoryId) {
-            return { expectedValue: 0, standardDeviation: 0, avgOptimistic: 0, avgMostLikely: 0, avgPessimistic: 0, estimatesForCategory: [] };
+            return { expectedValue: 0, standardDeviation: 0, estimatesForCategory: [] };
         }
 
         const filteredEstimates = story.estimates.filter(e => e.categoryId === selectedCategoryId);
 
         if (filteredEstimates.length === 0) {
-            return { expectedValue: 0, standardDeviation: 0, avgOptimistic: 0, avgMostLikely: 0, avgPessimistic: 0, estimatesForCategory: [] };
+            return { expectedValue: 0, standardDeviation: 0, estimatesForCategory: [] };
         }
 
         const stats = calculateStoryEstimate(filteredEstimates);
 
-        const total = filteredEstimates.reduce((acc, est) => ({
-            o: acc.o + est.optimistic,
-            m: acc.m + est.mostLikely,
-            p: acc.p + est.pessimistic
-        }), { o: 0, m: 0, p: 0 });
-
         return {
             ...stats,
-            avgOptimistic: total.o / filteredEstimates.length,
-            avgMostLikely: total.m / filteredEstimates.length,
-            avgPessimistic: total.p / filteredEstimates.length,
             estimatesForCategory: filteredEstimates
         };
     }, [story, selectedCategoryId]);
 
-    const chartData = useMemo(() =>
-        generateProbabilityData(avgOptimistic, avgMostLikely, avgPessimistic),
-        [avgOptimistic, avgMostLikely, avgPessimistic]
-    );
+    const chartData = useMemo(() => {
+        if (estimatesForCategory.length === 0) return [];
+        return generateMonteCarloData([estimatesForCategory]);
+    }, [estimatesForCategory]);
 
     if (!iteration || !story) {
         return (
@@ -176,8 +167,8 @@ export const StoryView: React.FC = () => {
                         key={cat.id}
                         onClick={() => setSelectedCategoryId(cat.id)}
                         className={`px-4 py-2 rounded-t-lg font-medium text-sm transition-colors whitespace-nowrap border-b-2 ${selectedCategoryId === cat.id
-                                ? 'border-indigo-600 text-indigo-600 bg-indigo-50'
-                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                            ? 'border-indigo-600 text-indigo-600 bg-indigo-50'
+                            : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                             }`}
                     >
                         <span className="w-2 h-2 rounded-full inline-block mr-2" style={{ backgroundColor: cat.color }}></span>
@@ -311,7 +302,7 @@ export const StoryView: React.FC = () => {
                                         <XAxis
                                             dataKey="value"
                                             type="number"
-                                            domain={[avgOptimistic, avgPessimistic]}
+                                            domain={['dataMin', 'dataMax']}
                                             tickFormatter={(val) => val.toFixed(1)}
                                             stroke="#64748b"
                                             fontSize={12}
@@ -330,7 +321,31 @@ export const StoryView: React.FC = () => {
                                             fillOpacity={1}
                                             fill="url(#colorProb)"
                                         />
-                                        <ReferenceLine x={expectedValue} stroke={activeCategory?.color || '#4f46e5'} strokeDasharray="3 3" label={{ value: 'Expected', position: 'top', fill: activeCategory?.color || '#4f46e5', fontSize: 12 }} />
+                                        {/* Confidence Interval Lines */}
+                                        <ReferenceLine
+                                            x={expectedValue}
+                                            stroke="#4f46e5"
+                                            strokeDasharray="3 3"
+                                            label={{ value: 'Avg', position: 'top', fill: '#4f46e5', fontSize: 11 }}
+                                        />
+                                        <ReferenceLine
+                                            x={expectedValue + 1.036 * standardDeviation}
+                                            stroke="#f59e0b"
+                                            strokeDasharray="3 3"
+                                            label={{ value: '70%', position: 'top', fill: '#f59e0b', fontSize: 11 }}
+                                        />
+                                        <ReferenceLine
+                                            x={expectedValue + 1.282 * standardDeviation}
+                                            stroke="#f97316"
+                                            strokeDasharray="3 3"
+                                            label={{ value: '80%', position: 'top', fill: '#f97316', fontSize: 11 }}
+                                        />
+                                        <ReferenceLine
+                                            x={expectedValue + 1.960 * standardDeviation}
+                                            stroke="#ef4444"
+                                            strokeDasharray="3 3"
+                                            label={{ value: '95%', position: 'top', fill: '#ef4444', fontSize: 11 }}
+                                        />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
