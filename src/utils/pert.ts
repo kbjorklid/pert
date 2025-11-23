@@ -184,7 +184,7 @@ function calculatePercentile(sortedData: Float64Array, percentile: number): numb
     return sortedData[lower] * (1 - weight) + sortedData[upper] * weight;
 }
 
-export const generateMonteCarloData = (storiesEstimates: Estimate[][], iterations: number = 200000) => {
+export const generateMonteCarloData = (storiesEstimates: Estimate[][], iterations: number = 50000) => {
     if (storiesEstimates.length === 0) return { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
 
     const samples = new Float64Array(iterations).fill(0);

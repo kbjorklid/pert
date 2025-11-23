@@ -182,20 +182,7 @@ export const IterationView: React.FC = () => {
     };
 
     // --- Calculation Logic ---
-    // Z-scores
-    const zScores: Record<string, number> = {
-        'Avg': 0,
-        '70%': 1.036,
-        '80%': 1.282,
-        '95%': 1.960
-    };
-    const z = zScores[confidenceLevel];
-
-    // Track cumulative stats per category
-    const runningStats: Record<string, { ev: number, var: number }> = {};
-    iteration.categories.forEach(cat => runningStats[cat.id] = { ev: 0, var: 0 });
-
-    // Calculate total required capacity per category
+    // Calculate total required capacity per category (for z-score fallback calculations if needed)
     const totalStats: Record<string, { ev: number, var: number }> = {};
     iteration.categories.forEach(cat => totalStats[cat.id] = { ev: 0, var: 0 });
 
@@ -212,21 +199,36 @@ export const IterationView: React.FC = () => {
     const categoryCutoffs: Record<string, number> = {};
     iteration.categories.forEach(cat => categoryCutoffs[cat.id] = -1);
 
-    iteration.stories.forEach((story, index) => {
+    // Percentile mapping for confidence levels
+    const percentileKey: Record<ConfidenceLevel, 'p50' | 'p70' | 'p80' | 'p95'> = {
+        'Avg': 'p50',
+        '70%': 'p70',
+        '80%': 'p80',
+        '95%': 'p95'
+    };
+
+    iteration.stories.forEach((_, index) => {
         iteration.categories.forEach(cat => {
-            const catEstimates = story.estimates.filter(e => e.categoryId === cat.id);
-            const { expectedValue, standardDeviation } = calculateStoryEstimate(catEstimates);
+            // Collect all stories up to and including current index for this category
+            const storiesUpToIndex: any[] = [];
+            for (let i = 0; i <= index; i++) {
+                const estimates = iteration.stories[i].estimates.filter(e => e.categoryId === cat.id);
+                if (estimates.length > 0) {
+                    storiesUpToIndex.push(estimates);
+                }
+            }
 
-            runningStats[cat.id].ev += expectedValue;
-            runningStats[cat.id].var += Math.pow(standardDeviation, 2);
+            // Run Monte Carlo simulation for cumulative stories
+            if (storiesUpToIndex.length > 0) {
+                const result = generateMonteCarloData(storiesUpToIndex);
+                const percentile = percentileKey[confidenceLevel];
+                const required = result.percentiles[percentile];
 
-            const cumStdDev = Math.sqrt(runningStats[cat.id].var);
-            const required = runningStats[cat.id].ev + (z * cumStdDev);
+                const capacity = iteration.capacities[cat.id] || 0;
 
-            const capacity = iteration.capacities[cat.id] || 0;
-
-            if (required <= capacity) {
-                categoryCutoffs[cat.id] = index;
+                if (required <= capacity) {
+                    categoryCutoffs[cat.id] = index;
+                }
             }
         });
     });
@@ -358,9 +360,9 @@ export const IterationView: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {iteration.categories.map(cat => {
-                        const totalEV = totalStats[cat.id].ev;
-                        const totalStdDev = Math.sqrt(totalStats[cat.id].var);
-                        const requiredCapacity = totalEV + (z * totalStdDev);
+                        // Get the required capacity from categoryGraphData which uses Monte Carlo percentiles
+                        const graphData = categoryGraphData.find(g => g.id === cat.id);
+                        const requiredCapacity = graphData?.requiredCapacity || 0;
                         const availableCapacity = iteration.capacities[cat.id] || 0;
                         const isOver = requiredCapacity > availableCapacity;
 
