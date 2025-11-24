@@ -41,3 +41,19 @@ export interface Iteration {
     capacity?: number;
     createdAt: number;
 }
+
+export type Category = EstimateCategory;
+
+export type ConfidenceLevel = 'Avg' | '70%' | '80%' | '95%';
+
+export type RiskLevel = 'Low' | 'Medium' | 'High';
+
+export interface CategoryStats {
+    expectedValue: number;
+}
+
+export interface CategoryProbabilities {
+    data: { value: number; probability: number }[];
+    percentiles: { p50: number; p70: number; p80: number; p95: number };
+    mean: number;
+}
