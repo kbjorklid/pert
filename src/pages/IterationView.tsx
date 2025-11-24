@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, GripVertical, Settings } from 'lucide-react';
+import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, GripVertical, Settings, Eye, EyeOff } from 'lucide-react';
 import { AlgorithmRegistry } from '../utils/algorithms/AlgorithmRegistry';
 
 import {
@@ -34,13 +34,15 @@ const SortableStoryItem = ({
     iterationId,
     deleteStory,
     categories,
-    categoryStats
+    categoryStats,
+    updateStory
 }: {
     story: Story;
     iterationId: string;
     deleteStory: (itId: string, sId: string) => void;
     categories: EstimateCategory[];
     categoryStats: Record<string, { expectedValue: number }>;
+    updateStory: (itId: string, sId: string, updates: Partial<Story>) => void;
 }) => {
     const {
         attributes,
@@ -55,11 +57,13 @@ const SortableStoryItem = ({
         transition,
     };
 
+    const isExcluded = story.excluded;
+
     return (
         <div
             ref={setNodeRef}
             style={style}
-            className="group bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex items-center justify-between"
+            className={`group bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex items-center justify-between ${isExcluded ? 'opacity-60 bg-slate-50' : ''}`}
         >
             <div className="flex items-center gap-3 flex-1">
                 <div {...attributes} {...listeners} className="cursor-grab text-slate-400 hover:text-slate-600">
@@ -68,7 +72,7 @@ const SortableStoryItem = ({
                 <Link to={`/iteration/${iterationId}/story/${story.id}`} className="flex-1">
                     <div className="flex items-center justify-between mr-8">
                         <div>
-                            <h3 className="text-lg font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                            <h3 className={`text-lg font-semibold transition-colors ${isExcluded ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-600'}`}>
                                 {story.title}
                             </h3>
                             {story.description && (
@@ -79,7 +83,7 @@ const SortableStoryItem = ({
                             {categories.map(cat => (
                                 <div key={cat.id} className="text-right min-w-[60px]">
                                     <div className="text-xs text-slate-500 uppercase" style={{ color: cat.color }}>{cat.name}</div>
-                                    <div className="font-bold text-lg text-slate-700">
+                                    <div className={`font-bold text-lg ${isExcluded ? 'text-slate-400' : 'text-slate-700'}`}>
                                         {categoryStats[cat.id]?.expectedValue > 0
                                             ? categoryStats[cat.id].expectedValue.toFixed(1)
                                             : '-'}
@@ -91,6 +95,13 @@ const SortableStoryItem = ({
                 </Link>
             </div>
             <div className="flex items-center gap-4">
+                <button
+                    onClick={() => updateStory(iterationId, story.id, { excluded: !isExcluded })}
+                    className={`p-2 rounded-lg transition-colors ${isExcluded ? 'text-slate-400 hover:text-slate-600' : 'text-indigo-600 hover:bg-indigo-50'}`}
+                    title={isExcluded ? "Include in calculations" : "Exclude from calculations"}
+                >
+                    {isExcluded ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
                 <Link
                     to={`/iteration/${iterationId}/story/${story.id}`}
                     className="text-slate-400 hover:text-indigo-600 transition-colors"
@@ -135,7 +146,8 @@ export const IterationView: React.FC = () => {
         updatePerson,
         updatePersonCapacity,
         updateTeamAvailability,
-        algorithm: algorithmType
+        algorithm: algorithmType,
+        updateStory
     } = useAppStore();
 
     const algorithm = useMemo(() => AlgorithmRegistry.getAlgorithm(algorithmType), [algorithmType]);
@@ -188,11 +200,13 @@ export const IterationView: React.FC = () => {
     };
 
     // --- Calculation Logic ---
-    // Optimization: Create stable dependencies for expensive calculations
     // We only want to re-run simulations if the actual numbers (estimates) or structure (categories) change.
     // We do NOT want to re-run if just a title or color changes.
-    const estimatesString = useMemo(() => {
-        return JSON.stringify(iteration.stories.map(s => s.estimates));
+    const activeStoriesJson = useMemo(() => {
+        return JSON.stringify(iteration.stories.map(s => ({
+            estimates: s.estimates,
+            excluded: s.excluded
+        })));
     }, [iteration.stories]);
 
     const categoryIdsString = useMemo(() => {
@@ -202,17 +216,20 @@ export const IterationView: React.FC = () => {
     // Step 1: Cache cumulative Monte Carlo results for story cutoffs - ONLY depends on estimates/structure
     const cumulativeMonteCarloResults = useMemo(() => {
         const results: Record<string, Record<number, { p50: number, p70: number, p80: number, p95: number }>> = {};
-        const allEstimates = JSON.parse(estimatesString) as Estimate[][];
+        const allStoriesData = JSON.parse(activeStoriesJson) as { estimates: Estimate[], excluded?: boolean }[];
         const categoryIds = categoryIdsString.split(',');
 
         categoryIds.forEach(catId => {
             results[catId] = {};
 
-            allEstimates.forEach((_, storyIndex) => {
+            allStoriesData.forEach((_, storyIndex) => {
                 // Collect all stories up to and including current index for this category
                 const storiesUpToIndex: any[] = [];
                 for (let i = 0; i <= storyIndex; i++) {
-                    const estimates = allEstimates[i].filter((e: Estimate) => e.categoryId === catId);
+                    const storyData = allStoriesData[i];
+                    if (storyData.excluded) continue; // Skip excluded stories
+
+                    const estimates = storyData.estimates.filter((e: Estimate) => e.categoryId === catId);
                     if (estimates.length > 0) {
                         storiesUpToIndex.push(estimates);
                     }
@@ -222,12 +239,15 @@ export const IterationView: React.FC = () => {
                 if (storiesUpToIndex.length > 0) {
                     const result = algorithm.calculate(storiesUpToIndex);
                     results[catId][storyIndex] = result.percentiles;
+                } else {
+                    // If no stories (or all excluded), result is 0
+                    results[catId][storyIndex] = { p50: 0, p70: 0, p80: 0, p95: 0 };
                 }
             });
         });
 
         return results;
-    }, [estimatesString, categoryIdsString]);
+    }, [activeStoriesJson, categoryIdsString, algorithm]);
 
     // Step 2: Derive cutoffs from cached Monte Carlo using current capacity/confidence (cheap)
     const cutoffMap = useMemo(() => {
@@ -273,15 +293,17 @@ export const IterationView: React.FC = () => {
 
     // Step 1: Memoize expensive Monte Carlo calculations - ONLY depends on estimates/structure
     const categoryMonteCarloResults = useMemo(() => {
-        const allEstimates = JSON.parse(estimatesString) as Estimate[][];
+        const allStoriesData = JSON.parse(activeStoriesJson) as { estimates: Estimate[], excluded?: boolean }[];
         const categoryIds = categoryIdsString.split(',');
 
         return categoryIds.map(catId => {
             const storiesEstimates: any[] = [];
             let hasEstimates = false;
 
-            allEstimates.forEach(storyEstimates => {
-                const catEstimates = storyEstimates.filter((e: Estimate) => e.categoryId === catId);
+            allStoriesData.forEach(storyData => {
+                if (storyData.excluded) return; // Skip excluded stories
+
+                const catEstimates = storyData.estimates.filter((e: Estimate) => e.categoryId === catId);
                 if (catEstimates.length > 0) {
                     hasEstimates = true;
                     storiesEstimates.push(catEstimates);
@@ -300,19 +322,19 @@ export const IterationView: React.FC = () => {
                 maxVal: result.data.length > 0 ? result.data[result.data.length - 1].value : 100
             };
         });
-    }, [estimatesString, categoryIdsString]);
+    }, [activeStoriesJson, categoryIdsString, algorithm]);
 
     // Step 1b: Memoize individual story Monte Carlo calculations - ONLY depends on estimates/structure
     const storyMonteCarloResults = useMemo(() => {
-        const allEstimates = JSON.parse(estimatesString) as Estimate[][];
+        const allStoriesData = JSON.parse(activeStoriesJson) as { estimates: Estimate[], excluded?: boolean }[];
         const categoryIds = categoryIdsString.split(',');
         // Map: storyIndex -> categoryId -> percentiles
         const results: Record<number, Record<string, { p50: number, p70: number, p80: number, p95: number }>> = {};
 
-        allEstimates.forEach((storyEstimates, index) => {
+        allStoriesData.forEach((storyData, index) => {
             results[index] = {};
             categoryIds.forEach(catId => {
-                const catEstimates = storyEstimates.filter(e => e.categoryId === catId);
+                const catEstimates = storyData.estimates.filter(e => e.categoryId === catId);
                 if (catEstimates.length > 0) {
                     // Use fewer iterations for individual stories to keep it snappy
                     const result = algorithm.calculate([catEstimates], 10000);
@@ -322,7 +344,7 @@ export const IterationView: React.FC = () => {
         });
 
         return results;
-    }, [estimatesString, categoryIdsString]);
+    }, [activeStoriesJson, categoryIdsString, algorithm]);
 
     // Step 2: Derive required capacity from confidence level (cheap - just percentile lookup)
     const categoryGraphData = useMemo(() => {
@@ -518,6 +540,7 @@ export const IterationView: React.FC = () => {
                                                 deleteStory={deleteStory}
                                                 categories={iteration.categories}
                                                 categoryStats={categoryStats}
+                                                updateStory={updateStory}
                                             />
                                             {/* Cut-off after this story */}
                                             {cutoffMap[index] && (

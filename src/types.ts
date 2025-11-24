@@ -19,6 +19,7 @@ export interface Story {
     description?: string;
     estimates: Estimate[];
     createdAt: number;
+    excluded?: boolean; // New field for What-If scenarios
 }
 
 export interface Person {
