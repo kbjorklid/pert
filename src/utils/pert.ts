@@ -185,7 +185,7 @@ function calculatePercentile(sortedData: Float64Array, percentile: number): numb
 }
 
 export const generateMonteCarloData = (storiesEstimates: Estimate[][], iterations: number = 50000) => {
-    if (storiesEstimates.length === 0) return { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
+    if (storiesEstimates.length === 0) return { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 }, mean: 0 };
 
     const samples = new Float64Array(iterations).fill(0);
     let minTotal = 0;
@@ -218,7 +218,7 @@ export const generateMonteCarloData = (storiesEstimates: Estimate[][], iteration
         return { o, p, range, alpha, betaVal };
     }).filter(p => p !== null) as ({ o: number, p: number, range: number, alpha: number, betaVal: number } | { fixed: number })[];
 
-    if (storyParams.length === 0) return { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
+    if (storyParams.length === 0) return { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 }, mean: 0 };
 
     // Run simulation
     for (let i = 0; i < iterations; i++) {
@@ -246,7 +246,7 @@ export const generateMonteCarloData = (storiesEstimates: Estimate[][], iteration
     // Create Histogram
     const bucketCount = 25; // Number of points in graph
     const range = maxTotal - minTotal;
-    if (range <= 0) return { data: [{ value: minTotal, probability: 1 }], percentiles };
+    if (range <= 0) return { data: [{ value: minTotal, probability: 1 }], percentiles, mean: minTotal };
 
     const buckets = new Array(bucketCount).fill(0);
     const stepSize = range / bucketCount;
@@ -270,5 +270,9 @@ export const generateMonteCarloData = (storiesEstimates: Estimate[][], iteration
     if (data[0].probability > 0) data.unshift({ value: minTotal, probability: 0 });
     if (data[data.length - 1].probability > 0) data.push({ value: maxTotal, probability: 0 });
 
-    return { data, percentiles };
+    // Calculate mean
+    const totalSum = samples.reduce((a, b) => a + b, 0);
+    const mean = totalSum / iterations;
+
+    return { data, percentiles, mean };
 };

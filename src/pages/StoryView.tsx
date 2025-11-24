@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { calculateStoryEstimate, generateMonteCarloData } from '../utils/pert';
+import { generateMonteCarloData } from '../utils/pert';
 import { StoryHeader } from '../components/StoryHeader';
 import { CategoryTabs } from '../components/CategoryTabs';
 import { EstimateForm } from '../components/EstimateForm';
@@ -27,29 +27,18 @@ export const StoryView: React.FC = () => {
 
     const activeCategory = iteration?.categories.find(c => c.id === selectedCategoryId);
 
-    const { expectedValue, standardDeviation, estimatesForCategory } = useMemo(() => {
+    const estimatesForCategory = useMemo(() => {
         if (!story || !selectedCategoryId) {
-            return { expectedValue: 0, standardDeviation: 0, estimatesForCategory: [] };
+            return [];
         }
 
-        const filteredEstimates = story.estimates.filter(e => e.categoryId === selectedCategoryId);
-
-        if (filteredEstimates.length === 0) {
-            return { expectedValue: 0, standardDeviation: 0, estimatesForCategory: [] };
-        }
-
-        const stats = calculateStoryEstimate(filteredEstimates);
-
-        return {
-            ...stats,
-            estimatesForCategory: filteredEstimates
-        };
+        return story.estimates.filter(e => e.categoryId === selectedCategoryId);
     }, [story, selectedCategoryId]);
 
-    const { chartData, percentiles } = useMemo(() => {
-        if (estimatesForCategory.length === 0) return { chartData: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
+    const { chartData, percentiles, mean } = useMemo(() => {
+        if (estimatesForCategory.length === 0) return { chartData: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 }, mean: 0 };
         const result = generateMonteCarloData([estimatesForCategory]);
-        return { chartData: result.data, percentiles: result.percentiles };
+        return { chartData: result.data, percentiles: result.percentiles, mean: result.mean };
     }, [estimatesForCategory]);
 
     if (!iteration || !story) {
@@ -124,9 +113,8 @@ export const StoryView: React.FC = () => {
 
                     {estimatesForCategory.length > 0 && (
                         <StatsPanel
-                            expectedValue={expectedValue}
-                            standardDeviation={standardDeviation}
-                            estimateCount={estimatesForCategory.length}
+                            average={mean}
+                            percentiles={percentiles}
                         />
                     )}
                 </div>

@@ -1,52 +1,38 @@
 import React from 'react';
-import { calculateConfidenceIntervals } from '../utils/pert';
+import { Calculator } from 'lucide-react';
 
 interface StatsPanelProps {
-    expectedValue: number;
-    standardDeviation: number;
-    estimateCount: number;
+    average: number;
+    percentiles: {
+        p70: number;
+        p80: number;
+        p95: number;
+    };
 }
 
-export const StatsPanel: React.FC<StatsPanelProps> = ({ expectedValue, standardDeviation, estimateCount }) => {
-    const intervals = calculateConfidenceIntervals(expectedValue, standardDeviation);
-
+export const StatsPanel: React.FC<StatsPanelProps> = ({ average, percentiles }) => {
     return (
-        <div className="space-y-6">
-            <div className="grid sm:grid-cols-2 gap-4">
-                <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
-                    <div className="text-sm text-indigo-600 font-medium uppercase mb-1">Final PERT Estimate</div>
-                    <div className="text-4xl font-bold text-indigo-900">{expectedValue.toFixed(2)}</div>
-                    <p className="text-sm text-indigo-700 mt-2">
-                        Based on {estimateCount} estimates.
-                    </p>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900 mb-6 flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-indigo-600" />
+                Estimates & Confidence
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 text-center">
+                    <div className="text-xs font-medium text-slate-500 uppercase mb-1">Average</div>
+                    <div className="text-2xl font-bold text-slate-900">{average.toFixed(1)}</div>
                 </div>
-                <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                    <div className="text-sm text-slate-500 font-medium uppercase mb-1">Uncertainty (Std Dev)</div>
-                    <div className="text-4xl font-bold text-slate-700">{standardDeviation.toFixed(2)}</div>
+                <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100 text-center">
+                    <div className="text-xs font-medium text-indigo-600 uppercase mb-1">70% Confidence</div>
+                    <div className="text-2xl font-bold text-indigo-900">{percentiles.p70.toFixed(1)}</div>
                 </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Confidence Intervals</h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                        <div className="text-xs font-medium text-slate-500 uppercase mb-1">50% Probability</div>
-                        <div className="font-semibold text-slate-900">
-                            {intervals.ci50.min.toFixed(1)} - {intervals.ci50.max.toFixed(1)}
-                        </div>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                        <div className="text-xs font-medium text-slate-500 uppercase mb-1">80% Probability</div>
-                        <div className="font-semibold text-slate-900">
-                            {intervals.ci80.min.toFixed(1)} - {intervals.ci80.max.toFixed(1)}
-                        </div>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                        <div className="text-xs font-medium text-slate-500 uppercase mb-1">95% Probability</div>
-                        <div className="font-semibold text-slate-900">
-                            {intervals.ci95.min.toFixed(1)} - {intervals.ci95.max.toFixed(1)}
-                        </div>
-                    </div>
+                <div className="p-4 bg-orange-50 rounded-lg border border-orange-100 text-center">
+                    <div className="text-xs font-medium text-orange-600 uppercase mb-1">80% Confidence</div>
+                    <div className="text-2xl font-bold text-orange-900">{percentiles.p80.toFixed(1)}</div>
+                </div>
+                <div className="p-4 bg-red-50 rounded-lg border border-red-100 text-center">
+                    <div className="text-xs font-medium text-red-600 uppercase mb-1">95% Confidence</div>
+                    <div className="text-2xl font-bold text-red-900">{percentiles.p95.toFixed(1)}</div>
                 </div>
             </div>
         </div>

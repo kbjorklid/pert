@@ -110,6 +110,13 @@ const SortableStoryItem = ({
 
 type ConfidenceLevel = 'Avg' | '70%' | '80%' | '95%';
 
+const PERCENTILE_KEY: Record<ConfidenceLevel, 'p50' | 'p70' | 'p80' | 'p95'> = {
+    'Avg': 'p50',
+    '70%': 'p70',
+    '80%': 'p80',
+    '95%': 'p95'
+};
+
 export const IterationView: React.FC = () => {
     const { iterationId } = useParams<{ iterationId: string }>();
     const {
@@ -237,12 +244,7 @@ export const IterationView: React.FC = () => {
         iteration.categories.forEach(cat => categoryCutoffs[cat.id] = -1);
 
         // Percentile mapping for confidence levels
-        const percentileKey: Record<ConfidenceLevel, 'p50' | 'p70' | 'p80' | 'p95'> = {
-            'Avg': 'p50',
-            '70%': 'p70',
-            '80%': 'p80',
-            '95%': 'p95'
-        };
+        // Uses PERCENTILE_KEY defined above
 
         iteration.categories.forEach(cat => {
             const capacity = iteration.capacities[cat.id] || 0;
@@ -253,7 +255,7 @@ export const IterationView: React.FC = () => {
                 for (let storyIndex = iteration.stories.length - 1; storyIndex >= 0; storyIndex--) {
                     const percentiles = catResults[storyIndex];
                     if (percentiles) {
-                        const percentile = percentileKey[confidenceLevel];
+                        const percentile = PERCENTILE_KEY[confidenceLevel];
                         const required = percentiles[percentile];
 
                         if (required <= capacity) {
@@ -308,18 +310,35 @@ export const IterationView: React.FC = () => {
         });
     }, [estimatesString, categoryIdsString]);
 
+    // Step 1b: Memoize individual story Monte Carlo calculations - ONLY depends on estimates/structure
+    const storyMonteCarloResults = useMemo(() => {
+        const allEstimates = JSON.parse(estimatesString) as Estimate[][];
+        const categoryIds = categoryIdsString.split(',');
+        // Map: storyIndex -> categoryId -> percentiles
+        const results: Record<number, Record<string, { p50: number, p70: number, p80: number, p95: number }>> = {};
+
+        allEstimates.forEach((storyEstimates, index) => {
+            results[index] = {};
+            categoryIds.forEach(catId => {
+                const catEstimates = storyEstimates.filter(e => e.categoryId === catId);
+                if (catEstimates.length > 0) {
+                    // Use fewer iterations for individual stories to keep it snappy
+                    const result = generateMonteCarloData([catEstimates], 10000);
+                    results[index][catId] = result.percentiles;
+                }
+            });
+        });
+
+        return results;
+    }, [estimatesString, categoryIdsString]);
+
     // Step 2: Derive required capacity from confidence level (cheap - just percentile lookup)
     const categoryGraphData = useMemo(() => {
-        const percentileKey: Record<ConfidenceLevel, 'p50' | 'p70' | 'p80' | 'p95'> = {
-            'Avg': 'p50',
-            '70%': 'p70',
-            '80%': 'p80',
-            '95%': 'p95'
-        };
+
 
         return iteration.categories.map((cat, index) => {
             const mcResult = categoryMonteCarloResults[index];
-            const percentile = percentileKey[confidenceLevel];
+            const percentile = PERCENTILE_KEY[confidenceLevel];
             const requiredCapacity = mcResult.hasEstimates ? mcResult.percentiles[percentile] : 0;
             const availableCapacity = iteration.capacities[cat.id] || 0;
 
@@ -476,10 +495,18 @@ export const IterationView: React.FC = () => {
 
                                 {iteration.stories.map((story, index) => {
                                     // Calculate stats per category for this story
+                                    // Calculate stats per category for this story
                                     const categoryStats: Record<string, { expectedValue: number }> = {};
                                     iteration.categories.forEach(cat => {
-                                        const catEstimates = story.estimates.filter(e => e.categoryId === cat.id);
-                                        categoryStats[cat.id] = calculateStoryEstimate(catEstimates);
+                                        const storyResults = storyMonteCarloResults[index];
+                                        const percentiles = storyResults ? storyResults[cat.id] : null;
+
+                                        if (percentiles) {
+                                            const key = PERCENTILE_KEY[confidenceLevel];
+                                            categoryStats[cat.id] = { expectedValue: percentiles[key] };
+                                        } else {
+                                            categoryStats[cat.id] = { expectedValue: 0 };
+                                        }
                                     });
 
                                     return (
