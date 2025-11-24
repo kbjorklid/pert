@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, Calendar, ChevronRight, Copy, Download, Upload, AlertTriangle, Pencil } from 'lucide-react';
+import { Plus, Trash2, Calendar, ChevronRight, Copy, Download, Upload, AlertTriangle, Pencil, Settings } from 'lucide-react';
+import { AlgorithmRegistry, AlgorithmType } from '../utils/algorithms/AlgorithmRegistry';
 
 
 export const Dashboard: React.FC = () => {
-    const { iterations, addIteration, deleteIteration, duplicateIteration, importData, updateIteration } = useAppStore();
+    const { iterations, addIteration, deleteIteration, duplicateIteration, importData, updateIteration, algorithm, setAlgorithm } = useAppStore();
     const [isCreating, setIsCreating] = useState(false);
     const [newIterationName, setNewIterationName] = useState('');
     const [showImportModal, setShowImportModal] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [pendingImportData, setPendingImportData] = useState<any>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -101,6 +103,14 @@ export const Dashboard: React.FC = () => {
                         accept=".json"
                     />
                     <button
+                        onClick={() => setShowSettingsModal(true)}
+                        className="bg-white text-slate-600 px-4 py-2 rounded-lg font-medium border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm"
+                        title="Settings"
+                    >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                    </button>
+                    <button
                         onClick={handleExport}
                         className="bg-white text-slate-600 px-4 py-2 rounded-lg font-medium border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm"
                         title="Export Data"
@@ -184,6 +194,50 @@ export const Dashboard: React.FC = () => {
                                 className="w-full text-slate-500 px-4 py-2 rounded-lg font-medium hover:bg-slate-100 transition-colors mt-2"
                             >
                                 Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showSettingsModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in">
+                    <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full mx-4 animate-in zoom-in-95">
+                        <div className="flex items-center gap-3 text-slate-700 mb-4">
+                            <Settings className="w-6 h-6" />
+                            <h3 className="text-lg font-semibold text-slate-900">Settings</h3>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Estimation Algorithm
+                                </label>
+                                <select
+                                    value={algorithm}
+                                    onChange={(e) => setAlgorithm(e.target.value as AlgorithmType)}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                                >
+                                    {AlgorithmRegistry.getAvailableAlgorithms().map((algo) => (
+                                        <option key={algo.type} value={algo.type}>
+                                            {algo.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    {algorithm === 'monte-carlo'
+                                        ? 'Simulates thousands of scenarios to estimate risk.'
+                                        : 'Uses statistical moments to fit a Beta distribution. Faster and smoother.'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                onClick={() => setShowSettingsModal(false)}
+                                className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                            >
+                                Done
                             </button>
                         </div>
                     </div>

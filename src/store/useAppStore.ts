@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Iteration, Estimate, Story, EstimateCategory, Person } from '../types';
+import { AlgorithmType } from '../utils/algorithms/AlgorithmRegistry';
 
 interface AppState {
     iterations: Iteration[];
@@ -32,6 +33,10 @@ interface AppState {
 
     // Data Management
     importData: (data: AppState, mode: 'replace' | 'add') => void;
+
+    // Algorithm Settings
+    algorithm: AlgorithmType;
+    setAlgorithm: (algo: AlgorithmType) => void;
 }
 
 // Simple UUID generator
@@ -42,6 +47,8 @@ const DEFAULT_CATEGORY: EstimateCategory = { id: 'default', name: 'Default', col
 export const useAppStore = create<AppState>()(
     persist(
         (set) => ({
+            algorithm: 'method-of-moments', // Default
+            setAlgorithm: (algo) => set({ algorithm: algo }),
             iterations: [],
             addIteration: (name) =>
                 set((state) => {

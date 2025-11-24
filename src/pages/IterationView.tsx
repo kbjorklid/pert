@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, GripVertical, Settings } from 'lucide-react';
-import { generateMonteCarloData } from '../utils/pert';
+import { AlgorithmRegistry } from '../utils/algorithms/AlgorithmRegistry';
+
 import {
     DndContext,
     closestCenter,
@@ -133,8 +134,11 @@ export const IterationView: React.FC = () => {
         removePerson,
         updatePerson,
         updatePersonCapacity,
-        updateTeamAvailability
+        updateTeamAvailability,
+        algorithm: algorithmType
     } = useAppStore();
+
+    const algorithm = useMemo(() => AlgorithmRegistry.getAlgorithm(algorithmType), [algorithmType]);
 
     const iteration = iterations.find((it) => it.id === iterationId);
 
@@ -216,7 +220,7 @@ export const IterationView: React.FC = () => {
 
                 // Run Monte Carlo simulation for cumulative stories and cache all percentiles
                 if (storiesUpToIndex.length > 0) {
-                    const result = generateMonteCarloData(storiesUpToIndex);
+                    const result = algorithm.calculate(storiesUpToIndex);
                     results[catId][storyIndex] = result.percentiles;
                 }
             });
@@ -284,7 +288,7 @@ export const IterationView: React.FC = () => {
                 }
             });
 
-            const result = hasEstimates ? generateMonteCarloData(storiesEstimates) : { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 }, mean: 0 };
+            const result = hasEstimates ? algorithm.calculate(storiesEstimates) : { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 }, mean: 0 };
 
             return {
                 categoryId: catId,
@@ -311,7 +315,7 @@ export const IterationView: React.FC = () => {
                 const catEstimates = storyEstimates.filter(e => e.categoryId === catId);
                 if (catEstimates.length > 0) {
                     // Use fewer iterations for individual stories to keep it snappy
-                    const result = generateMonteCarloData([catEstimates], 10000);
+                    const result = algorithm.calculate([catEstimates], 10000);
                     results[index][catId] = result.percentiles;
                 }
             });

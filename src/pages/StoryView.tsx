@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { generateMonteCarloData } from '../utils/pert';
+import { AlgorithmRegistry } from '../utils/algorithms/AlgorithmRegistry';
+
 import { StoryHeader } from '../components/StoryHeader';
 import { CategoryTabs } from '../components/CategoryTabs';
 import { EstimateForm } from '../components/EstimateForm';
@@ -11,7 +12,10 @@ import { StatsPanel } from '../components/StatsPanel';
 
 export const StoryView: React.FC = () => {
     const { iterationId, storyId } = useParams<{ iterationId: string; storyId: string }>();
-    const { iterations, addEstimate, removeEstimate, updateStory } = useAppStore();
+    const { iterations, addEstimate, removeEstimate, updateStory, algorithm: algorithmType } = useAppStore();
+
+    const algorithm = useMemo(() => AlgorithmRegistry.getAlgorithm(algorithmType), [algorithmType]);
+
 
     const iteration = iterations.find((it) => it.id === iterationId);
     const story = iteration?.stories.find((s) => s.id === storyId);
@@ -37,9 +41,9 @@ export const StoryView: React.FC = () => {
 
     const { chartData, percentiles, mean } = useMemo(() => {
         if (estimatesForCategory.length === 0) return { chartData: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 }, mean: 0 };
-        const result = generateMonteCarloData([estimatesForCategory]);
+        const result = algorithm.calculate([estimatesForCategory]);
         return { chartData: result.data, percentiles: result.percentiles, mean: result.mean };
-    }, [estimatesForCategory]);
+    }, [estimatesForCategory, algorithm]);
 
     if (!iteration || !story) {
         return (
