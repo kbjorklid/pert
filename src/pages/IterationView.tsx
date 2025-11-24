@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { ArrowLeft, Plus, Clock, Trash2, ChevronRight, GripVertical, Settings } from 'lucide-react';
-import { calculateStoryEstimate, generateMonteCarloData } from '../utils/pert';
+import { generateMonteCarloData } from '../utils/pert';
 import {
     DndContext,
     closestCenter,
@@ -184,19 +184,6 @@ export const IterationView: React.FC = () => {
     };
 
     // --- Calculation Logic ---
-    // Calculate total required capacity per category (for z-score fallback calculations if needed)
-    const totalStats: Record<string, { ev: number, var: number }> = {};
-    iteration.categories.forEach(cat => totalStats[cat.id] = { ev: 0, var: 0 });
-
-    iteration.stories.forEach(story => {
-        iteration.categories.forEach(cat => {
-            const catEstimates = story.estimates.filter(e => e.categoryId === cat.id);
-            const { expectedValue, standardDeviation } = calculateStoryEstimate(catEstimates);
-            totalStats[cat.id].ev += expectedValue;
-            totalStats[cat.id].var += Math.pow(standardDeviation, 2);
-        });
-    });
-
     // Optimization: Create stable dependencies for expensive calculations
     // We only want to re-run simulations if the actual numbers (estimates) or structure (categories) change.
     // We do NOT want to re-run if just a title or color changes.
@@ -297,12 +284,13 @@ export const IterationView: React.FC = () => {
                 }
             });
 
-            const result = hasEstimates ? generateMonteCarloData(storiesEstimates) : { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 } };
+            const result = hasEstimates ? generateMonteCarloData(storiesEstimates) : { data: [], percentiles: { p50: 0, p70: 0, p80: 0, p95: 0 }, mean: 0 };
 
             return {
                 categoryId: catId,
                 chartData: result.data,
                 percentiles: result.percentiles,
+                mean: result.mean,
                 hasEstimates,
                 minVal: result.data.length > 0 ? result.data[0].value : 0,
                 maxVal: result.data.length > 0 ? result.data[result.data.length - 1].value : 100
@@ -338,8 +326,17 @@ export const IterationView: React.FC = () => {
 
         return iteration.categories.map((cat, index) => {
             const mcResult = categoryMonteCarloResults[index];
-            const percentile = PERCENTILE_KEY[confidenceLevel];
-            const requiredCapacity = mcResult.hasEstimates ? mcResult.percentiles[percentile] : 0;
+
+            let requiredCapacity = 0;
+            if (mcResult.hasEstimates) {
+                if (confidenceLevel === 'Avg') {
+                    requiredCapacity = mcResult.mean;
+                } else {
+                    const percentile = PERCENTILE_KEY[confidenceLevel];
+                    requiredCapacity = mcResult.percentiles[percentile];
+                }
+            }
+
             const availableCapacity = iteration.capacities[cat.id] || 0;
 
             return {
@@ -349,11 +346,11 @@ export const IterationView: React.FC = () => {
                 maxVal: mcResult.maxVal,
                 requiredCapacity,
                 availableCapacity,
-                expectedValue: totalStats[cat.id].ev,
+                expectedValue: mcResult.mean,
                 hasEstimates: mcResult.hasEstimates
             };
         });
-    }, [categoryMonteCarloResults, iteration.categories, confidenceLevel, iteration.capacities, totalStats]);
+    }, [categoryMonteCarloResults, iteration.categories, confidenceLevel, iteration.capacities]);
 
     return (
         <div className="space-y-8">
