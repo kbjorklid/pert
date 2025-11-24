@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, ChevronUp, BarChart2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, BarChart2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 type ConfidenceLevel = 'Avg' | '70%' | '80%' | '95%';
@@ -32,16 +32,20 @@ export const CategoryGraphs: React.FC<CategoryGraphsProps> = ({
 }) => {
     return (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <button
+            <div
+                className="p-6 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
                 onClick={() => setShowGraphs(!showGraphs)}
-                className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
             >
-                <div className="flex items-center gap-2 font-semibold text-slate-900">
-                    <BarChart2 className="w-5 h-5 text-indigo-600" />
-                    Category Probability Distributions
+                <div className="flex items-center gap-4">
+                    <button className="text-slate-400 hover:text-slate-600">
+                        {showGraphs ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                    </button>
+                    <div className="flex items-center gap-2 font-semibold text-slate-900 text-lg">
+                        <BarChart2 className="w-5 h-5 text-indigo-600" />
+                        Category Probability Distributions
+                    </div>
                 </div>
-                {showGraphs ? <ChevronUp className="w-5 h-5 text-slate-500" /> : <ChevronDown className="w-5 h-5 text-slate-500" />}
-            </button>
+            </div>
 
             {showGraphs && (
                 <div className="p-6 border-t border-slate-200">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Pencil, Trash2, Users } from 'lucide-react';
 import { Iteration, Person } from '../../types';
 
 interface PeopleAndCapacityProps {
@@ -60,7 +60,8 @@ export const PeopleAndCapacity: React.FC<PeopleAndCapacityProps> = ({
                     <button className="text-slate-400 hover:text-slate-600">
                         {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                     </button>
-                    <h3 className="text-lg font-semibold text-slate-900">
+                    <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-indigo-600" />
                         People & Capacity
                     </h3>
                     {!isExpanded && (
