@@ -139,7 +139,7 @@ export const IterationView: React.FC = () => {
     const [isManagingCats, setIsManagingCats] = useState(false);
 
     // Person Management State
-    const [isManagingPeople, setIsManagingPeople] = useState(false);
+    // Removed isManagingPeople state as it's no longer needed
 
     // Confidence Level State
     const [confidenceLevel, setConfidenceLevel] = useState<ConfidenceLevel>('Avg');
@@ -410,8 +410,6 @@ export const IterationView: React.FC = () => {
             {/* People & Capacity Management */}
             <PeopleAndCapacity
                 iteration={iteration}
-                isManagingPeople={isManagingPeople}
-                setIsManagingPeople={setIsManagingPeople}
                 addPerson={addPerson}
                 removePerson={removePerson}
                 updatePerson={updatePerson}
