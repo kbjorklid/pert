@@ -60,9 +60,9 @@ export const StoryView: React.FC = () => {
         addEstimate(iteration.id, story.id, estimate);
     };
 
-    const handleUpdateStory = (title: string, description: string) => {
+    const handleUpdateStory = (title: string, description: string, ticketLink: string) => {
         if (iterationId && storyId) {
-            updateStory(iterationId, storyId, { title, description });
+            updateStory(iterationId, storyId, { title, description, ticketLink });
         }
     };
 

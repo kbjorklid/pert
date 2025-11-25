@@ -6,17 +6,18 @@ import type { Iteration, Story } from '../types';
 interface StoryHeaderProps {
     iteration: Iteration;
     story: Story;
-    onUpdate: (title: string, description: string) => void;
+    onUpdate: (title: string, description: string, ticketLink: string) => void;
 }
 
 export const StoryHeader: React.FC<StoryHeaderProps> = ({ iteration, story, onUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editTitle, setEditTitle] = useState('');
     const [editDesc, setEditDesc] = useState('');
+    const [editTicketLink, setEditTicketLink] = useState('');
 
     const handleSaveEdit = () => {
         if (editTitle.trim()) {
-            onUpdate(editTitle.trim(), editDesc.trim());
+            onUpdate(editTitle.trim(), editDesc.trim(), editTicketLink.trim());
             setIsEditing(false);
         }
     };
@@ -24,6 +25,7 @@ export const StoryHeader: React.FC<StoryHeaderProps> = ({ iteration, story, onUp
     const startEditing = () => {
         setEditTitle(story.title);
         setEditDesc(story.description || '');
+        setEditTicketLink(story.ticketLink || '');
         setIsEditing(true);
     };
 
@@ -50,6 +52,13 @@ export const StoryHeader: React.FC<StoryHeaderProps> = ({ iteration, story, onUp
                             className="w-full text-slate-500 border border-slate-300 rounded-lg p-2 outline-none focus:border-indigo-500"
                             placeholder="Description"
                             rows={2}
+                        />
+                        <input
+                            type="text"
+                            value={editTicketLink}
+                            onChange={(e) => setEditTicketLink(e.target.value)}
+                            className="w-full text-sm text-slate-500 border border-slate-300 rounded-lg p-2 outline-none focus:border-indigo-500"
+                            placeholder="Ticket Link (e.g., Jira URL)"
                         />
                         <div className="flex gap-2">
                             <button
@@ -79,6 +88,16 @@ export const StoryHeader: React.FC<StoryHeaderProps> = ({ iteration, story, onUp
                         </h1>
                         {story.description && (
                             <p className="text-slate-500 mt-1 text-lg">{story.description}</p>
+                        )}
+                        {story.ticketLink && (
+                            <a
+                                href={story.ticketLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-indigo-600 hover:underline mt-1 inline-block"
+                            >
+                                {story.ticketLink}
+                            </a>
                         )}
                     </div>
                 )}

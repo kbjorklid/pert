@@ -27,6 +27,7 @@ import { CapacitiesAndStats } from '../components/iteration/CapacitiesAndStats';
 import { CategoryGraphs } from '../components/iteration/CategoryGraphs';
 import { StoryForm } from '../components/iteration/StoryForm';
 import { StoryCutoffIndicator } from '../components/iteration/StoryCutoffIndicator';
+import { QuickAddStories } from '../components/QuickAddStories';
 
 // Sortable Story Item Component
 const SortableStoryItem = ({
@@ -134,6 +135,7 @@ export const IterationView: React.FC = () => {
     const {
         iterations,
         addStory,
+        addStories,
         deleteStory,
         reorderStories,
         updateIteration,
@@ -147,7 +149,9 @@ export const IterationView: React.FC = () => {
         updatePersonCapacity,
         updateTeamAvailability,
         algorithm: algorithmType,
-        updateStory
+        updateStory,
+        quickAddAddToTop,
+        setQuickAddAddToTop
     } = useAppStore();
 
     const algorithm = useMemo(() => AlgorithmRegistry.getAlgorithm(algorithmType), [algorithmType]);
@@ -155,6 +159,7 @@ export const IterationView: React.FC = () => {
     const iteration = iterations.find((it) => it.id === iterationId);
 
     const [isCreating, setIsCreating] = useState(false);
+    const [isQuickAdding, setIsQuickAdding] = useState(false);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [titleInput, setTitleInput] = useState('');
 
@@ -177,9 +182,14 @@ export const IterationView: React.FC = () => {
 
     if (!iteration) return <div>Iteration not found</div>;
 
-    const handleCreateStory = (title: string, description: string) => {
-        addStory(iteration.id, title, description);
+    const handleCreateStory = (title: string, description: string, ticketLink: string) => {
+        addStory(iteration.id, title, description, ticketLink);
         setIsCreating(false);
+    };
+
+    const handleQuickAddStories = (stories: { title: string; description?: string; ticketLink?: string }[], position: 'top' | 'bottom') => {
+        addStories(iteration.id, stories, position);
+        setIsQuickAdding(false);
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
@@ -474,19 +484,37 @@ export const IterationView: React.FC = () => {
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
                     <h2 className="text-xl font-semibold text-slate-900">Stories</h2>
-                    <button
-                        onClick={() => setIsCreating(true)}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Add Story
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setIsCreating(true)}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add Story
+                        </button>
+                        <button
+                            onClick={() => setIsQuickAdding(true)}
+                            className="bg-white text-indigo-600 border border-indigo-200 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Quick Add
+                        </button>
+                    </div>
                 </div>
 
                 {isCreating && (
                     <StoryForm
                         onSubmit={handleCreateStory}
                         onCancel={() => setIsCreating(false)}
+                    />
+                )}
+
+                {isQuickAdding && (
+                    <QuickAddStories
+                        onSave={handleQuickAddStories}
+                        onCancel={() => setIsQuickAdding(false)}
+                        initialAddToTop={quickAddAddToTop}
+                        onAddToTopChange={setQuickAddAddToTop}
                     />
                 )}
 

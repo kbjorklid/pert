@@ -17,7 +17,8 @@ interface AppState {
     updateCategory: (iterationId: string, categoryId: string, updates: { name?: string; color?: string }) => void;
     updateCategoryCapacity: (iterationId: string, categoryId: string, capacity: number) => void;
 
-    addStory: (iterationId: string, title: string, description?: string) => void;
+    addStory: (iterationId: string, title: string, description?: string, ticketLink?: string) => void;
+    addStories: (iterationId: string, stories: { title: string, description?: string, ticketLink?: string }[], position?: 'top' | 'bottom') => void;
     updateStory: (iterationId: string, storyId: string, updates: Partial<Story>) => void;
     deleteStory: (iterationId: string, storyId: string) => void;
     reorderStories: (iterationId: string, newStories: Story[]) => void;
@@ -37,6 +38,10 @@ interface AppState {
     // Algorithm Settings
     algorithm: AlgorithmType;
     setAlgorithm: (algo: AlgorithmType) => void;
+
+    // Preferences
+    quickAddAddToTop: boolean;
+    setQuickAddAddToTop: (addToTop: boolean) => void;
 }
 
 // Simple UUID generator
@@ -49,6 +54,8 @@ export const useAppStore = create<AppState>()(
         (set) => ({
             algorithm: 'method-of-moments', // Default
             setAlgorithm: (algo) => set({ algorithm: algo }),
+            quickAddAddToTop: false,
+            setQuickAddAddToTop: (addToTop) => set({ quickAddAddToTop: addToTop }),
             iterations: [],
             addIteration: (name) =>
                 set((state) => {
@@ -192,7 +199,7 @@ export const useAppStore = create<AppState>()(
                     ),
                 })),
 
-            addStory: (iterationId, title, description) =>
+            addStory: (iterationId, title, description, ticketLink) =>
                 set((state) => ({
                     iterations: state.iterations.map((it) =>
                         it.id === iterationId
@@ -204,10 +211,44 @@ export const useAppStore = create<AppState>()(
                                         id: generateId(),
                                         title,
                                         description,
+                                        ticketLink,
                                         estimates: [],
                                         createdAt: Date.now(),
                                     },
                                 ],
+                            }
+                            : it
+                    ),
+                })),
+            addStories: (iterationId, stories, position = 'bottom') =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === iterationId
+                            ? {
+                                ...it,
+                                stories: position === 'top'
+                                    ? [
+                                        ...stories.map(s => ({
+                                            id: generateId(),
+                                            title: s.title,
+                                            description: s.description,
+                                            ticketLink: s.ticketLink,
+                                            estimates: [],
+                                            createdAt: Date.now(),
+                                        })),
+                                        ...it.stories,
+                                    ]
+                                    : [
+                                        ...it.stories,
+                                        ...stories.map(s => ({
+                                            id: generateId(),
+                                            title: s.title,
+                                            description: s.description,
+                                            ticketLink: s.ticketLink,
+                                            estimates: [],
+                                            createdAt: Date.now(),
+                                        }))
+                                    ],
                             }
                             : it
                     ),

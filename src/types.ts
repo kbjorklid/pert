@@ -20,6 +20,7 @@ export interface Story {
     estimates: Estimate[];
     createdAt: number;
     excluded?: boolean; // New field for What-If scenarios
+    ticketLink?: string;
 }
 
 export interface Person {
