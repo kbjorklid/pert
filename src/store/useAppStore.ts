@@ -24,6 +24,7 @@ interface AppState {
     reorderStories: (iterationId: string, newStories: Story[]) => void;
 
     addEstimate: (iterationId: string, storyId: string, estimate: Omit<Estimate, 'id'>) => void;
+    updateEstimate: (iterationId: string, storyId: string, estimateId: string, updates: Partial<Estimate>) => void;
     removeEstimate: (iterationId: string, storyId: string, estimateId: string) => void;
 
     // Person Management
@@ -294,6 +295,26 @@ export const useAppStore = create<AppState>()(
                                                 ...s.estimates,
                                                 { ...estimate, id: generateId() },
                                             ],
+                                        }
+                                        : s
+                                ),
+                            }
+                            : it
+                    ),
+                })),
+            updateEstimate: (iterationId, storyId, estimateId, updates) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === iterationId
+                            ? {
+                                ...it,
+                                stories: it.stories.map((s) =>
+                                    s.id === storyId
+                                        ? {
+                                            ...s,
+                                            estimates: s.estimates.map((e) =>
+                                                e.id === estimateId ? { ...e, ...updates } : e
+                                            ),
                                         }
                                         : s
                                 ),

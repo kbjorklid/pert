@@ -12,7 +12,7 @@ import { StatsPanel } from '../components/StatsPanel';
 
 export const StoryView: React.FC = () => {
     const { iterationId, storyId } = useParams<{ iterationId: string; storyId: string }>();
-    const { iterations, addEstimate, removeEstimate, updateStory, algorithm: algorithmType } = useAppStore();
+    const { iterations, addEstimate, removeEstimate, updateEstimate, updateStory, algorithm: algorithmType } = useAppStore();
 
     const algorithm = useMemo(() => AlgorithmRegistry.getAlgorithm(algorithmType), [algorithmType]);
 
@@ -70,6 +70,10 @@ export const StoryView: React.FC = () => {
         removeEstimate(iteration.id, story.id, estimateId);
     };
 
+    const handleUpdateEstimate = (estimateId: string, updates: any) => {
+        updateEstimate(iteration.id, story.id, estimateId, updates);
+    };
+
     return (
         <div className="space-y-8 pb-12">
             <StoryHeader
@@ -100,6 +104,7 @@ export const StoryView: React.FC = () => {
                             estimates={estimatesForCategory}
                             category={activeCategory}
                             onRemove={handleRemoveEstimate}
+                            onUpdate={handleUpdateEstimate}
                         />
                     )}
                 </div>
