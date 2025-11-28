@@ -28,6 +28,7 @@ import { CategoryGraphs } from '../components/iteration/CategoryGraphs';
 import { StoryForm } from '../components/iteration/StoryForm';
 import { StoryCutoffIndicator } from '../components/iteration/StoryCutoffIndicator';
 import { QuickAddStories } from '../components/QuickAddStories';
+import { EstimatePopup } from '../components/EstimatePopup';
 
 // Sortable Story Item Component
 const SortableStoryItem = ({
@@ -36,7 +37,8 @@ const SortableStoryItem = ({
     deleteStory,
     categories,
     categoryStats,
-    updateStory
+    updateStory,
+    onCategoryClick
 }: {
     story: Story;
     iterationId: string;
@@ -44,6 +46,7 @@ const SortableStoryItem = ({
     categories: EstimateCategory[];
     categoryStats: Record<string, { expectedValue: number }>;
     updateStory: (itId: string, sId: string, updates: Partial<Story>) => void;
+    onCategoryClick: (story: Story, category: EstimateCategory, event: React.MouseEvent) => void;
 }) => {
     const {
         attributes,
@@ -82,7 +85,14 @@ const SortableStoryItem = ({
                         </div>
                         <div className="flex items-center gap-6">
                             {categories.map(cat => (
-                                <div key={cat.id} className="text-right min-w-[60px]">
+                                <div
+                                    key={cat.id}
+                                    className="text-right min-w-[60px] cursor-pointer hover:bg-slate-50 rounded px-1 transition-colors"
+                                    onClick={(e) => {
+                                        e.preventDefault(); // Prevent navigation
+                                        onCategoryClick(story, cat, e);
+                                    }}
+                                >
                                     <div className="text-xs text-slate-500 uppercase" style={{ color: cat.color }}>{cat.name}</div>
                                     <div className={`font-bold text-lg ${isExcluded ? 'text-slate-400' : 'text-slate-700'}`}>
                                         {categoryStats[cat.id]?.expectedValue > 0
@@ -151,7 +161,9 @@ export const IterationView: React.FC = () => {
         algorithm: algorithmType,
         updateStory,
         quickAddAddToTop,
-        setQuickAddAddToTop
+        setQuickAddAddToTop,
+        addEstimate,
+        updateEstimate
     } = useAppStore();
 
     const algorithm = useMemo(() => AlgorithmRegistry.getAlgorithm(algorithmType), [algorithmType]);
@@ -172,6 +184,35 @@ export const IterationView: React.FC = () => {
     // Confidence Level State
     const [confidenceLevel, setConfidenceLevel] = useState<ConfidenceLevel>('Avg');
     const [showGraphs, setShowGraphs] = useState(false);
+
+    // Estimate Popup State
+    const [activePopup, setActivePopup] = useState<{
+        storyId: string;
+        categoryId: string;
+        position: { x: number; y: number };
+    } | null>(null);
+
+    const handleCategoryClick = (story: Story, category: EstimateCategory, event: React.MouseEvent) => {
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        setActivePopup({
+            storyId: story.id,
+            categoryId: category.id,
+            position: { x: rect.left, y: rect.bottom + window.scrollY + 5 }
+        });
+    };
+
+    const handleSaveEstimate = (estimate: { categoryId: string; userName: string; optimistic: number; mostLikely: number; pessimistic: number }, estimateId?: string) => {
+        if (!activePopup || !iteration) return;
+
+        const { storyId } = activePopup;
+
+        if (estimateId) {
+            updateEstimate(iteration.id, storyId, estimateId, estimate);
+        } else {
+            addEstimate(iteration.id, storyId, estimate);
+        }
+        setActivePopup(null);
+    };
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -569,6 +610,7 @@ export const IterationView: React.FC = () => {
                                                 categories={iteration.categories}
                                                 categoryStats={categoryStats}
                                                 updateStory={updateStory}
+                                                onCategoryClick={handleCategoryClick}
                                             />
                                             {/* Cut-off after this story */}
                                             {cutoffMap[index] && (
@@ -586,6 +628,27 @@ export const IterationView: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {activePopup && (
+                (() => {
+                    const story = iteration.stories.find(s => s.id === activePopup.storyId);
+                    const category = iteration.categories.find(c => c.id === activePopup.categoryId);
+
+                    if (story && category) {
+                        return (
+                            <EstimatePopup
+                                iteration={iteration}
+                                story={story}
+                                category={category}
+                                position={activePopup.position}
+                                onClose={() => setActivePopup(null)}
+                                onSave={handleSaveEstimate}
+                            />
+                        );
+                    }
+                    return null;
+                })()
+            )}
         </div>
     );
 };

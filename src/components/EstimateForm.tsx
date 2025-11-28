@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { EstimateInputs } from './EstimateInputs';
 import type { Category, Iteration } from '../types';
 
 interface EstimateFormProps {
@@ -51,41 +52,14 @@ export const EstimateForm: React.FC<EstimateFormProps> = ({ iteration, category,
                         ))}
                     </select>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                    <div>
-                        <label className="block text-xs font-medium text-green-600 uppercase mb-1" title="Optimistic">Opt (O)</label>
-                        <input
-                            type="number"
-                            value={optimistic}
-                            onChange={(e) => setOptimistic(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                            required
-                            min="0"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-blue-600 uppercase mb-1" title="Most Likely">Likely (M)</label>
-                        <input
-                            type="number"
-                            value={mostLikely}
-                            onChange={(e) => setMostLikely(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                            required
-                            min="0"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-red-600 uppercase mb-1" title="Pessimistic">Pess (P)</label>
-                        <input
-                            type="number"
-                            value={pessimistic}
-                            onChange={(e) => setPessimistic(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                            required
-                            min="0"
-                        />
-                    </div>
-                </div>
+                <EstimateInputs
+                    values={{ optimistic, mostLikely, pessimistic }}
+                    onChange={(vals) => {
+                        setOptimistic(String(vals.optimistic));
+                        setMostLikely(String(vals.mostLikely));
+                        setPessimistic(String(vals.pessimistic));
+                    }}
+                />
                 <button
                     type="submit"
                     className="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors"

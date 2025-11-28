@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Users, Trash2, Edit2, Check, X } from 'lucide-react';
+import { EstimateInputs } from './EstimateInputs';
 import { calculatePERT } from '../utils/pert';
 import type { Estimate, Category } from '../types';
 
@@ -98,35 +99,16 @@ export const EstimatesList: React.FC<EstimatesListProps> = ({ estimates, categor
                                 </div>
 
                                 {isEditing ? (
-                                    <div className="grid grid-cols-3 gap-2 mb-2">
-                                        <div>
-                                            <label className="text-xs text-slate-500 block mb-1">Opt</label>
-                                            <input
-                                                type="number"
-                                                className="w-full text-sm border-slate-200 rounded px-2 py-1 text-green-600 font-medium"
-                                                value={editValues.optimistic}
-                                                onChange={(e) => setEditValues({ ...editValues, optimistic: parseFloat(e.target.value) || 0 })}
-                                                autoFocus
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-slate-500 block mb-1">Likely</label>
-                                            <input
-                                                type="number"
-                                                className="w-full text-sm border-slate-200 rounded px-2 py-1 text-blue-600 font-medium"
-                                                value={editValues.mostLikely}
-                                                onChange={(e) => setEditValues({ ...editValues, mostLikely: parseFloat(e.target.value) || 0 })}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-slate-500 block mb-1">Pess</label>
-                                            <input
-                                                type="number"
-                                                className="w-full text-sm border-slate-200 rounded px-2 py-1 text-red-600 font-medium"
-                                                value={editValues.pessimistic}
-                                                onChange={(e) => setEditValues({ ...editValues, pessimistic: parseFloat(e.target.value) || 0 })}
-                                            />
-                                        </div>
+                                    <div className="mb-2">
+                                        <EstimateInputs
+                                            values={editValues}
+                                            onChange={(vals) => setEditValues({
+                                                optimistic: Number(vals.optimistic),
+                                                mostLikely: Number(vals.mostLikely),
+                                                pessimistic: Number(vals.pessimistic)
+                                            })}
+                                            autoFocus
+                                        />
                                     </div>
                                 ) : (
                                     <div className="flex justify-between text-sm mb-2">
