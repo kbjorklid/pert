@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Iteration, Estimate, Story, EstimateCategory, Person } from '../types';
+import { Iteration, Estimate, Story, EstimateCategory, Person, TagDefinition } from '../types';
 import { AlgorithmType } from '../utils/algorithms/AlgorithmRegistry';
+import { getTagColor } from '../components/Tag';
 
 interface AppState {
     iterations: Iteration[];
@@ -33,6 +34,12 @@ interface AppState {
     updatePerson: (iterationId: string, personId: string, updates: { name?: string; availability?: number }) => void;
     updatePersonCapacity: (iterationId: string, personId: string, categoryId: string, capacity: number) => void;
 
+    // Tag Management
+    addTag: (iterationId: string, tag: string) => void;
+    deleteTag: (iterationId: string, tag: string) => void;
+    updateTagColor: (iterationId: string, tag: string, color: string) => void;
+    updateStoryTags: (iterationId: string, storyId: string, tags: string[]) => void;
+
     // Data Management
     importData: (data: AppState, mode: 'replace' | 'add') => void;
 
@@ -62,6 +69,7 @@ export const useAppStore = create<AppState>()(
                 set((state) => {
                     // Inherit categories from the most recent iteration, or use default
                     let categories: EstimateCategory[] = [DEFAULT_CATEGORY];
+                    let tags: TagDefinition[] = [];
                     let capacities: Record<string, number> = { [DEFAULT_CATEGORY.id]: 10 };
 
                     if (state.iterations.length > 0) {
@@ -70,6 +78,7 @@ export const useAppStore = create<AppState>()(
                         if (prev.categories && prev.categories.length > 0) {
                             categories = [...prev.categories];
                             capacities = { ...prev.capacities };
+                            tags = prev.tags ? [...prev.tags] : [];
                         } else if (prev.capacity) {
                             // Legacy migration for inheritance
                             capacities = { [DEFAULT_CATEGORY.id]: prev.capacity };
@@ -83,6 +92,7 @@ export const useAppStore = create<AppState>()(
                                 name,
                                 stories: [],
                                 categories,
+                                tags,
                                 people: [],
                                 teamAvailability: 0.7, // Default 70%
                                 capacities,
@@ -106,6 +116,7 @@ export const useAppStore = create<AppState>()(
                         id: generateId(),
                         name: `${sourceIteration.name} (Copy)`,
                         createdAt: Date.now(),
+                        tags: sourceIteration.tags ? [...sourceIteration.tags] : [],
                         stories: sourceIteration.stories.map((story) => ({
                             ...story,
                             id: generateId(),
@@ -213,6 +224,7 @@ export const useAppStore = create<AppState>()(
                                         title,
                                         description,
                                         ticketLink,
+                                        tags: [],
                                         estimates: [],
                                         createdAt: Date.now(),
                                     },
@@ -234,6 +246,7 @@ export const useAppStore = create<AppState>()(
                                             title: s.title,
                                             description: s.description,
                                             ticketLink: s.ticketLink,
+                                            tags: [],
                                             estimates: [],
                                             createdAt: Date.now(),
                                         })),
@@ -246,6 +259,7 @@ export const useAppStore = create<AppState>()(
                                             title: s.title,
                                             description: s.description,
                                             ticketLink: s.ticketLink,
+                                            tags: [],
                                             estimates: [],
                                             createdAt: Date.now(),
                                         }))
@@ -436,6 +450,69 @@ export const useAppStore = create<AppState>()(
                     }),
                 })),
 
+            addTag: (iterationId, tagName) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) => {
+                        if (it.id !== iterationId) return it;
+                        if (it.tags?.some(t => t.name === tagName)) return it;
+
+                        const newTag: TagDefinition = {
+                            id: tagName,
+                            name: tagName,
+                            color: getTagColor(tagName)
+                        };
+
+                        return {
+                            ...it,
+                            tags: [...(it.tags || []), newTag]
+                        };
+                    })
+                })),
+
+            deleteTag: (iterationId, tagName) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === iterationId
+                            ? {
+                                ...it,
+                                tags: (it.tags || []).filter((t) => t.name !== tagName),
+                                stories: it.stories.map((s) => ({
+                                    ...s,
+                                    tags: (s.tags || []).filter((t) => t !== tagName),
+                                })),
+                            }
+                            : it
+                    ),
+                })),
+
+            updateTagColor: (iterationId, tagName, color) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === iterationId
+                            ? {
+                                ...it,
+                                tags: (it.tags || []).map((t) =>
+                                    t.name === tagName ? { ...t, color } : t
+                                ),
+                            }
+                            : it
+                    ),
+                })),
+
+            updateStoryTags: (iterationId, storyId, tags) =>
+                set((state) => ({
+                    iterations: state.iterations.map((it) =>
+                        it.id === iterationId
+                            ? {
+                                ...it,
+                                stories: it.stories.map((s) =>
+                                    s.id === storyId ? { ...s, tags } : s
+                                ),
+                            }
+                            : it
+                    ),
+                })),
+
             importData: (data, mode) =>
                 set((state) => {
                     if (mode === 'replace') {
@@ -463,6 +540,7 @@ export const useAppStore = create<AppState>()(
                             stories: importedIteration.stories.map((story) => ({
                                 ...story,
                                 id: generateId(),
+                                tags: story.tags ? [...story.tags] : [],
                                 estimates: story.estimates.map((est) => ({
                                     ...est,
                                     id: generateId(),
@@ -491,6 +569,7 @@ export const useAppStore = create<AppState>()(
                             return {
                                 ...it,
                                 categories: [DEFAULT_CATEGORY],
+                                tags: [],
                                 people: [],
                                 capacities: { [DEFAULT_CATEGORY.id]: it.capacity || 10 }
                             };

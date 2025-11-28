@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { EstimateInputs } from './EstimateInputs';
-import type { Iteration, Story, EstimateCategory, Estimate } from '../types';
+import type { Iteration, Story, EstimateCategory } from '../types';
 
 interface EstimatePopupProps {
     iteration: Iteration;

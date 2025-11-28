@@ -21,7 +21,7 @@ import {
     useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Story, EstimateCategory, Estimate } from '../types';
+import { Story, EstimateCategory, Estimate, TagDefinition } from '../types';
 import { PeopleAndCapacity } from '../components/iteration/PeopleAndCapacity';
 import { CapacitiesAndStats } from '../components/iteration/CapacitiesAndStats';
 import { CategoryGraphs } from '../components/iteration/CategoryGraphs';
@@ -29,6 +29,7 @@ import { StoryForm } from '../components/iteration/StoryForm';
 import { StoryCutoffIndicator } from '../components/iteration/StoryCutoffIndicator';
 import { QuickAddStories } from '../components/QuickAddStories';
 import { EstimatePopup } from '../components/EstimatePopup';
+import { TagList } from '../components/TagList';
 
 // Sortable Story Item Component
 const SortableStoryItem = ({
@@ -38,7 +39,10 @@ const SortableStoryItem = ({
     categories,
     categoryStats,
     updateStory,
-    onCategoryClick
+    onCategoryClick,
+    allTags,
+    addTag,
+    updateStoryTags
 }: {
     story: Story;
     iterationId: string;
@@ -47,6 +51,9 @@ const SortableStoryItem = ({
     categoryStats: Record<string, { expectedValue: number }>;
     updateStory: (itId: string, sId: string, updates: Partial<Story>) => void;
     onCategoryClick: (story: Story, category: EstimateCategory, event: React.MouseEvent) => void;
+    allTags: TagDefinition[];
+    addTag: (itId: string, tag: string) => void;
+    updateStoryTags: (itId: string, sId: string, tags: string[]) => void;
 }) => {
     const {
         attributes,
@@ -62,6 +69,18 @@ const SortableStoryItem = ({
     };
 
     const isExcluded = story.excluded;
+
+    const handleAddTag = (tag: string) => {
+        // If tag doesn't exist in iteration, add it
+        if (!allTags.some(t => t.name === tag)) {
+            addTag(iterationId, tag);
+        }
+        // Add tag to story if not already present
+        if (!story.tags?.includes(tag)) {
+            const newTags = [...(story.tags || []), tag];
+            updateStoryTags(iterationId, story.id, newTags);
+        }
+    };
 
     return (
         <div
@@ -79,9 +98,15 @@ const SortableStoryItem = ({
                             <h3 className={`text-lg font-semibold transition-colors ${isExcluded ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-600'}`}>
                                 {story.title}
                             </h3>
-                            {story.description && (
-                                <p className="text-sm text-slate-500 mt-1 line-clamp-1">{story.description}</p>
-                            )}
+                            <div className="mt-1">
+                                <TagList
+                                    tags={story.tags || []}
+                                    allTags={allTags}
+                                    iterationId={iterationId}
+                                    storyId={story.id}
+                                    onAddTag={handleAddTag}
+                                />
+                            </div>
                         </div>
                         <div className="flex items-center gap-6">
                             {categories.map(cat => (
@@ -163,7 +188,9 @@ export const IterationView: React.FC = () => {
         quickAddAddToTop,
         setQuickAddAddToTop,
         addEstimate,
-        updateEstimate
+        updateEstimate,
+        addTag,
+        updateStoryTags
     } = useAppStore();
 
     const algorithm = useMemo(() => AlgorithmRegistry.getAlgorithm(algorithmType), [algorithmType]);
@@ -611,6 +638,9 @@ export const IterationView: React.FC = () => {
                                                 categoryStats={categoryStats}
                                                 updateStory={updateStory}
                                                 onCategoryClick={handleCategoryClick}
+                                                allTags={iteration.tags || []}
+                                                addTag={addTag}
+                                                updateStoryTags={updateStoryTags}
                                             />
                                             {/* Cut-off after this story */}
                                             {cutoffMap[index] && (
