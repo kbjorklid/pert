@@ -1,10 +1,11 @@
 import { useRef, useEffect } from 'react';
 import { TagInput } from './TagInput';
+import { TagDefinition } from '../types';
 
 interface TagPopupProps {
     isOpen: boolean;
     onClose: () => void;
-    existingTags: string[];
+    existingTags: TagDefinition[];
     selectedTags?: string[];
     onAddTag: (tag: string) => void;
     position: { x: number; y: number };

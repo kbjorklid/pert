@@ -14,9 +14,10 @@ interface TagListProps {
     storyId?: string; // Needed for removing from story
     onAddTag: (tag: string) => void;
     className?: string;
+    showAddButton?: boolean;
 }
 
-export const TagList = ({ tags, allTags, iterationId, storyId, onAddTag, className }: TagListProps) => {
+export const TagList = ({ tags, allTags, iterationId, storyId, onAddTag, className, showAddButton }: TagListProps) => {
     const { updateTagColor, updateStoryTags } = useAppStore();
     const [isHovered, setIsHovered] = useState(false);
 
@@ -85,7 +86,7 @@ export const TagList = ({ tags, allTags, iterationId, storyId, onAddTag, classNa
                 );
             })}
 
-            {(isHovered || isPopupOpen || tags.length === 0) && (
+            {(isHovered || showAddButton || isPopupOpen || tags.length === 0) && (
                 <button
                     ref={addButtonRef}
                     onClick={handleAddClick}
@@ -99,7 +100,7 @@ export const TagList = ({ tags, allTags, iterationId, storyId, onAddTag, classNa
             <TagPopup
                 isOpen={isPopupOpen}
                 onClose={() => setIsPopupOpen(false)}
-                existingTags={allTags.map(t => t.name)}
+                existingTags={allTags}
                 selectedTags={tags}
                 onAddTag={(tag) => {
                     onAddTag(tag);

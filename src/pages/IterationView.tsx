@@ -82,11 +82,15 @@ const SortableStoryItem = ({
         }
     };
 
+    const [isHovered, setIsHovered] = useState(false);
+
     return (
         <div
             ref={setNodeRef}
             style={style}
             className={`group bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex items-center justify-between ${isExcluded ? 'opacity-60 bg-slate-50' : ''}`}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
         >
             <div className="flex items-center gap-3 flex-1">
                 <div {...attributes} {...listeners} className="cursor-grab text-slate-400 hover:text-slate-600">
@@ -105,6 +109,7 @@ const SortableStoryItem = ({
                                     iterationId={iterationId}
                                     storyId={story.id}
                                     onAddTag={handleAddTag}
+                                    showAddButton={isHovered}
                                 />
                             </div>
                         </div>

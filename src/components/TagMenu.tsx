@@ -56,7 +56,14 @@ export const TagMenu = ({
         >
             <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-100">
                 <span className="font-medium text-sm text-gray-700 truncate" title={tagName}>{tagName}</span>
-                <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                <button
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onClose();
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                >
                     <X size={14} />
                 </button>
             </div>
@@ -72,7 +79,11 @@ export const TagMenu = ({
                                 color,
                                 currentColor === color && "ring-2 ring-offset-1 ring-indigo-500 border-white"
                             )}
-                            onClick={() => onColorChange(color)}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onColorChange(color);
+                            }}
                             title="Select Color"
                         />
                     ))}
@@ -80,7 +91,11 @@ export const TagMenu = ({
             </div>
 
             <button
-                onClick={onDelete}
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDelete();
+                }}
                 className="w-full flex items-center gap-2 text-red-600 hover:bg-red-50 p-1.5 rounded text-xs font-medium transition-colors"
             >
                 <Trash2 size={14} />
